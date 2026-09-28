@@ -1,0 +1,31 @@
+From 87c91e255fdb222870c478f6295bf2e588ab95ad Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 25 Sep 2026 14:18:25 +0000
+Subject: [PATCH] Fix cart decrement removing item one step early (FM-BUG-07)
+
+Decrementing an item at quantity min+1 deleted it from the cart instead
+of lowering it to the minimum quantity. Restore the '<= min' threshold.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LhGtEgmsg2VufjeoQGUcd9
+---
+ apps/web/src/hooks/useCart.ts | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/apps/web/src/hooks/useCart.ts b/apps/web/src/hooks/useCart.ts
+index 1275cd2..6988b8b 100644
+--- a/apps/web/src/hooks/useCart.ts
++++ b/apps/web/src/hooks/useCart.ts
+@@ -72,8 +72,7 @@ export async function decrementCartItem(uid: string): Promise<void> {
+   const existing = await db.products.get(uid);
+   if (!existing) return;
+   const min = existing.limitations?.minQuantity ?? 1;
+-  // FM-BUG-07
+-  if (existing.quantity <= min + 1) {
++  if (existing.quantity <= min) {
+     await db.products.delete(uid);
+     return;
+   }
+-- 
+2.43.0
+
