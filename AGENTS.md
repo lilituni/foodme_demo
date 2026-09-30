@@ -1,0 +1,1 @@
+C:/Users/Lilit/Desktop/learning/ai_in_qa/foodme_demo/CLAUDE.md
