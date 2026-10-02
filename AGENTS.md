@@ -75,9 +75,13 @@ npm run test:e2e     # Playwright e2e
 
 ## Environment
 
-- Copy `.env.example` to `.env` for local runs. See
-  @.agents/rules/secrets-and-env.md for what belongs there and what must
-  never be hardcoded.
+- Copy `.env.example` to `.env` for local runs.
+- A `PreToolUse` hook (`.agents/hooks/check-secrets.sh`, wired in
+  `.agents/settings.json`) blocks any `git commit` whose staged diff
+  looks like it contains a real secret (API key, private key, a DSN with
+  embedded credentials). For what the hook can't catch (sync'ing
+  `.env.example`, not copying the one known hardcoded exception), see
+  @.agents/rules/secrets-and-env.md.
 - Local Postgres + services are wired through `infra/docker-compose.yml`
   (profile `core`).
 
