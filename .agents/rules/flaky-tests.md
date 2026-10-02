@@ -59,3 +59,21 @@ encounter anywhere in `apps/web/e2e` or `apps/admin/e2e`), follow the
 on the actual UI/network/state signal you're waiting for, using
 Playwright's built-in auto-waiting locators and `expect(...)` matchers
 rather than a fixed delay.
+
+## Verify a fix by repetition, not a single green run
+
+A single passing run after a flaky-test fix proves almost nothing — the
+original bug was non-deterministic, so one pass could just be luck.
+Before considering a flaky test actually fixed, run it repeatedly (e.g.
+20 times) and confirm it passes every time:
+
+```bash
+npx playwright test flake-dish-modal.spec.ts --repeat-each=20
+```
+
+If it fails even once across those runs, the underlying race is still
+there — a different wait condition is needed, not a longer fixed delay
+(a bigger `waitForTimeout` is not a fix; see above). The same logic
+applies to any new test you write for timing-sensitive behavior: if
+you're not confident it's deterministic, run it several times before
+trusting it.
