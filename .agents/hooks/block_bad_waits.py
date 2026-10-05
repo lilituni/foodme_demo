@@ -7,7 +7,9 @@ before-count) has to be positive for the block to fire. This matters: a
 naive "does the new text contain waitForTimeout" check would also block
 the actual fix (removing the wait), which defeats the point.
 
-Scope: apps/{web,admin}/e2e/*.spec.ts only. Other waits (waitForSelector,
+Scope: any JS/TS file under apps/{web,admin}/e2e/ - specs AND shared
+helpers like e2e/auth.ts, since a wait in a helper is inherited by every
+spec that imports it. Other waits (waitForSelector,
 waitForResponse, waitForURL, waitForLoadState) are legitimate
 condition-based waits and are never touched - only the fixed
 arbitrary-delay one is blocked. See .agents/rules/flaky-tests.md for why.
@@ -25,7 +27,7 @@ import os
 import re
 import sys
 
-E2E_SPEC_PATTERN = re.compile(r"[\\/]e2e[\\/].*\.spec\.ts$", re.IGNORECASE)
+E2E_SPEC_PATTERN = re.compile(r"[\\/]e2e[\\/].*\.[cm]?[jt]sx?$", re.IGNORECASE)
 WAIT_PATTERN = re.compile(r"\bwaitForTimeout\s*\(")
 
 
