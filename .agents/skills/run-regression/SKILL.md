@@ -22,6 +22,16 @@ varies in wording between invocations).
   both. If neither is available, skip e2e and say so explicitly in the
   report - don't invent a different way to bring up the stack as a silent
   workaround, and don't skip without saying so.
+- **On Windows with Git Bash:** `docker run ... -w /app -v "C:\...:/app" ...`
+  can fail immediately with `docker: Error response from daemon: the
+  working directory '...' is invalid, it needs to be an absolute path` -
+  Git Bash's MSYS layer rewrites the leading `/app` in `-w /app` as if it
+  were a POSIX path on the host, mangling it before Docker ever sees it.
+  Set `export MSYS_NO_PATHCONV=1` (or prefix the single command with
+  `MSYS_NO_PATHCONV=1 docker run ...`) before any `docker run` that mixes
+  a Windows-style `-v` mount with a POSIX-style `-w`. Confirmed needed for
+  both the backend and web e2e commands below when run from Git Bash;
+  not needed from PowerShell.
 
 ## Step 1 — Backend (JUnit via Docker)
 
@@ -136,3 +146,48 @@ tests failed." If a run's results differ from a previous run of the same
 code (a test that passed before now fails, or vice versa, with no code
 change in between), call that out explicitly - that's a flakiness signal,
 not noise to smooth over.
+
+## Known results, as of 2026-10-05 (10 consecutive full-scope runs)
+
+The full suite (backend + web e2e) was run 10 times back to back against
+unchanged code to separate real flakiness from one-off noise. See
+`runs/regression.md` at the repo root for the full per-run table. Summary:
+
+- **Backend (JUnit): fully deterministic, not flaky.** All 10 runs: 19
+  tests, 16 passed, the same 3 failed every single time:
+  - `OrderControllerTest > createOrder_fractionalDishPrice_subtotalKeepsCents()`
+  - `OrderControllerTest > createOrder_dishFromDifferentChef_isRejected()`
+  - `OrderControllerTest > deliveryPrice_subtotalEqualsFreeThreshold_isFree()`
+
+  These are consistently-failing tests (likely real bugs or outdated
+  assertions), not flaky ones - don't report them as "flaky," and don't
+  "fix" them as part of an unrelated change without being asked.
+
+- **Web e2e (Playwright): one flaky test observed, rate 1/10.**
+  `e2e/happy-path.spec.ts:45:1 "dish modal additions raise cart line
+  price"` failed once (run 8 of 10) with
+  `locator.scrollIntoViewIfNeeded: Element is not attached to the DOM` /
+  `element is not stable` at the line that scrolls the dish card into
+  view before clicking it - a render-timing race, not a data problem. It
+  passed the other 9/10 runs. If you see this exact failure, re-run
+  before treating it as a real regression; if it starts failing at a
+  materially higher rate, it's a candidate for the same fix pattern as
+  `FM-FLAKE-05` (wait for a stable/visible locator state instead of an
+  immediate action).
+- All other 22 web e2e tests passed all 10/10 runs, including
+  `flake-dish-modal.spec.ts` (`FM-FLAKE-01`) - it happened to pass every
+  time in this sample. That's expected per its own doc (300ms is usually
+  enough) and is **not** evidence it's been fixed; see
+  `.agents/rules/flaky-tests.md` before touching it.
+
+**Timing (this machine, Docker Desktop, image already pulled locally):**
+- Backend suite: ~103-110s per run (one run took 130s with no obvious
+  cause - no image pull and build outputs were already `UP-TO-DATE` in
+  every run, so there's no clear cold-start effect here; treat ~110s as
+  the normal case and don't read too much into one slower run).
+- Web e2e suite: ~87-98s wall time per run, of which `npm ci` alone is
+  ~57-60s **every run** - `npm ci` always wipes and reinstalls
+  `node_modules` from scratch by design, so the mounted volume gives no
+  caching benefit across runs. Actual Playwright execution (23 tests) is
+  only ~27-33s of that. Don't be surprised the "fast" part of e2e is a
+  small fraction of the command's wall time.
