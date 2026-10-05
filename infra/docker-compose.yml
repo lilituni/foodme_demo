@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["core"]
+    env_file: ../.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-foodme}
+      POSTGRES_USER: ${POSTGRES_USER:-foodme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-foodme}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-foodme} -d ${POSTGRES_DB:-foodme}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    profiles: ["core"]
+    env_file: ../.env
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-foodme}
+      DB_USER: ${POSTGRES_USER:-foodme}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-foodme}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOKI_PUSH_URL: ${LOKI_PUSH_URL:-}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../apps/web
+      args:
+        # Baked into the JS bundle at build time; must be reachable from
+        # wherever the *browser* actually runs - host.docker.internal works
+        # both from a container (e.g. Playwright running in its own
+        # container) and, via Docker Desktop, from the host itself.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://host.docker.internal:8081}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    profiles: ["core"]
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  admin:
+    build:
+      context: ../apps/admin
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://host.docker.internal:8081}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    profiles: ["core"]
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
