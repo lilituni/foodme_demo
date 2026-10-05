@@ -9,6 +9,15 @@
             "command": "bash .agents/hooks/check-secrets.sh"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .agents/hooks/block_bad_waits.py"
+          }
+        ]
       }
     ]
   }
