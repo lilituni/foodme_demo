@@ -59,6 +59,43 @@ test.describe("Storefront flows", () => {
     await expect(cart.getByText(/empty/i)).toBeVisible();
   });
 
+  // CHK-04: decrementing at the dish's minimum quantity removes the item
+  // instead of showing a quantity below that minimum.
+  test("decrementing cart item at minimum quantity removes it", async ({ page }) => {
+    const cart = await addFirstDishToCart(page);
+
+    await cart.getByRole("button", { name: "Decrease quantity" }).click();
+
+    await expect(cart.locator(".cic_root")).toHaveCount(0);
+    await expect(cart.getByText(/empty/i)).toBeVisible();
+  });
+
+  // CHK-05: adding a dish from a different chef doesn't silently mix carts -
+  // it prompts to switch kitchens, and cart stays unchanged until confirmed.
+  test("adding a dish from a different chef prompts to switch kitchens", async ({ page }) => {
+    const cart = await addFirstDishToCart(page);
+    const chefAUrl = page.url();
+
+    await page.goto("/explore");
+    await page.locator("a.cc_card").nth(1).click();
+    await expect(page).toHaveURL(/\/chef\/\d+/);
+
+    await page.locator("button.dc_card").first().click();
+    await page.getByRole("button", { name: "Add to cart" }).click();
+
+    await expect(page.getByText("Switch kitchens?")).toBeVisible();
+
+    await page.getByRole("button", { name: "Keep cart & browse" }).click();
+    await expect(page.getByText("Switch kitchens?")).toHaveCount(0);
+
+    // The cart panel is scoped to whichever chef's page is open (useCart(chefId)
+    // filters by the current chef), so it can't be checked from chef B's page -
+    // go back to chef A's page and confirm the original item is still there,
+    // untouched, after declining the switch.
+    await page.goto(chefAUrl);
+    await expect(cart.locator(".cic_root")).toHaveCount(1);
+  });
+
   test("delivery shows address fields; takeaway hides them", async ({ page }) => {
     await addFirstDishToCart(page);
     await page.locator("aside.uc-panel").getByRole("link", { name: "Go to checkout" }).click();

@@ -158,4 +158,87 @@ class OrderControllerTest {
 
         assertTrue(createdAt.startsWith(LocalDate.now().toString()));
     }
+
+    // CHK-10: chef 1 (marta-k, see data.sql) has free_delivery_from = 8000.0.
+    // Delivery should be free when subtotal exactly equals that threshold, not
+    // only when it exceeds it.
+    @Test
+    void deliveryPrice_subtotalEqualsFreeThreshold_isFree() throws Exception {
+        Map<String, Object> body = Map.of(
+                "chefId", 1,
+                "subtotal", 8000.0,
+                "deliveryMethod", "DELIVERY"
+        );
+        mockMvc.perform(post("/api/order/delivery-price")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveryPrice").value(0.0));
+    }
+
+    // CHK-11: dish 5 (see data.sql) belongs to chef 2 and is priced 1500.33
+    // specifically to catch truncation - quantity 2 should total 3000.66, not
+    // 3000. Chef 2 (not chef 1) deliberately, so it doesn't bump chef 1's
+    // active-dish count and break DishControllerTest's exact-count assertion.
+    @Order(6)
+    @Test
+    void createOrder_fractionalDishPrice_subtotalKeepsCents() throws Exception {
+        Map<String, Object> body = Map.of(
+                "chefId", 2,
+                "receiverName", "Ann",
+                "receiverPhoneNumber", "+37491234567",
+                "receiverEmail", "ann@example.com",
+                "paymentType", "CASH",
+                "deliveryMethod", "TAKEAWAY",
+                "createOrderDishes", List.of(Map.of("dishId", 5, "quantity", 2))
+        );
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + customerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPrice").value(3000.66));
+    }
+
+    // CHK-12: dish 3 belongs to chef 2 (ararat-grill, see data.sql), not chef 1.
+    // Ordering it under chefId=1 should be rejected, not silently accepted.
+    @Order(7)
+    @Test
+    void createOrder_dishFromDifferentChef_isRejected() throws Exception {
+        Map<String, Object> body = Map.of(
+                "chefId", 1,
+                "receiverName", "Ann",
+                "receiverPhoneNumber", "+37491234567",
+                "receiverEmail", "ann@example.com",
+                "paymentType", "CASH",
+                "deliveryMethod", "TAKEAWAY",
+                "createOrderDishes", List.of(Map.of("dishId", 3, "quantity", 1))
+        );
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + customerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().is4xxClientError());
+    }
+
+    // CHK-14: a dish id that doesn't exist at all should 404, not be silently
+    // skipped or crash with a 500.
+    @Order(8)
+    @Test
+    void createOrder_nonexistentDish_returns404() throws Exception {
+        Map<String, Object> body = Map.of(
+                "chefId", 1,
+                "receiverName", "Ann",
+                "receiverPhoneNumber", "+37491234567",
+                "receiverEmail", "ann@example.com",
+                "paymentType", "CASH",
+                "deliveryMethod", "TAKEAWAY",
+                "createOrderDishes", List.of(Map.of("dishId", 999999, "quantity", 1))
+        );
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + customerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isNotFound());
+    }
 }

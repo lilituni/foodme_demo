@@ -24,7 +24,8 @@ INSERT INTO foodme.dish (id, name_en, name_am, name_ru, description_en, price, u
 (1, 'Lavash Wrap', 'Լավաշ', 'Лаваш', 'Wrap.', 1800.0, '/img/dish/1.jpg', '300 g', '300 գ', '300 г', 'ACTIVE', 1, 0, 1, 1),
 (2, 'Khashlama', 'Խաշլամա', 'Хашлама', 'Stew.', 4200.0, '/img/dish/2.jpg', '450 g', '450 գ', '450 г', 'ACTIVE', 1, 0, 1, 2),
 (3, 'Pork Khorovats', 'Խոզի խորոված', 'Свиной хоровац', 'Grill.', 4800.0, '/img/dish/3.jpg', '400 g', '400 գ', '400 г', 'ACTIVE', 1, 0, 2, 2),
-(4, 'Inactive Dish', 'Ապրանք', 'Товар', 'Not available.', 2500.0, '/img/dish/4.jpg', '300 g', '300 գ', '300 г', 'INACTIVE', 1, 1, 1, 2);
+(4, 'Inactive Dish', 'Ապրանք', 'Товар', 'Not available.', 2500.0, '/img/dish/4.jpg', '300 g', '300 գ', '300 г', 'INACTIVE', 1, 1, 1, 2),
+(5, 'Fractional Price Test Dish', 'Թեստային ուտեստ', 'Тестовое блюдо', 'Used by CHK-11 to catch price truncation.', 1500.33, '/img/dish/5.jpg', '100 g', '100 գ', '100 г', 'ACTIVE', 1, 1, 2, 2);
 
 INSERT INTO foodme.admin (id, username, password_hash, role) VALUES
 (1, 'admin', '$2y$10$oMkXATQDgiPBCh29e2u7ROJkWXECjE2kmHPwCpJGAvkf3TuFbnZCi', 'ADMIN');
