@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "qase": {
+      "command": "cmd",
+      "args": ["/c", "agentsecrets", "env", "--", "npx", "-y", "@qase/mcp-server"]
+    },
+    "agentsecrets": {
+      "command": "cmd",
+      "args": ["/c", "agentsecrets", "mcp", "serve"]
+    }
+  }
+}

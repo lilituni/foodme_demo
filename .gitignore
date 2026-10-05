@@ -34,7 +34,6 @@ blob-report/
 .env
 .env.*
 !.env.example
-.mcp.json
 !.mcp.json.example
 
 # --- IDE ------------------------------------------------------------------
@@ -60,3 +59,14 @@ docs/planted-defects.md
 
 # Machine-local compose override (host-port remap for this workstation)
 infra/docker-compose.local.yml
+
+# AgentSecrets environment files
+.env.development
+.env.staging
+.env.production
+
+# AgentSecrets per-machine project link (personal workspace/project IDs)
+.agentsecrets/
+
+# AgentSecrets-generated agent instructions
+.agent/workflows/
