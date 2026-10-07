@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Package } from "lucide-react";
+import { ChevronRight, Package, Star } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
+import { RateOrderDialog } from "@/components/sections/rate-order-dialog";
+import { StarRatingDisplay } from "@/components/sections/star-rating";
 import { useAuth } from "@/providers/auth-provider";
 import { formatAmd } from "@/lib/utils";
+import type { FullOrderDto } from "@/types";
 
 const STATUS_LABEL: Record<string, string> = {
   NEW: "Received",
@@ -32,6 +36,7 @@ function formatOrderDate(value: string) {
 
 export default function Orders() {
   const { isAuthenticated, customer, logout } = useAuth();
+  const [ratingOrder, setRatingOrder] = useState<FullOrderDto | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-orders", customer?.id],
@@ -92,12 +97,13 @@ export default function Orders() {
       {data && data.list.length > 0 && (
         <ul className="space-y-3">
           {data.list.map((order) => (
-            <li key={order.number}>
+            <li key={order.number} className="bezel-outer shadow-diffuse">
+              <div className="bezel-inner overflow-hidden">
               <Link
                 to={`/tracking/${order.number}`}
-                className="bezel-outer shadow-diffuse block transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-px active:scale-[0.99]"
+                className="block transition-colors duration-200 hover:bg-zinc-50/60"
               >
-                <div className="bezel-inner flex items-center gap-4 px-5 py-4">
+                <div className="flex items-center gap-4 px-5 py-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display text-lg font-bold text-zinc-900">
@@ -120,9 +126,43 @@ export default function Orders() {
                   </div>
                 </div>
               </Link>
+              {order.status === "DELIVERED" && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
+                  {order.review ? (
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-zinc-500">Your rating</span>
+                        <StarRatingDisplay rating={order.review.rating} />
+                      </div>
+                      {order.review.comment && (
+                        <p className="mt-1 break-words text-sm text-zinc-600">{order.review.comment}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-sm text-zinc-500">How was it?</span>
+                      <Button size="sm" variant="outline" onClick={() => setRatingOrder(order)}>
+                        <Star strokeWidth={2} />
+                        Rate order
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+              </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {ratingOrder && (
+        <RateOrderDialog
+          order={ratingOrder}
+          open
+          onOpenChange={(open) => {
+            if (!open) setRatingOrder(null);
+          }}
+        />
       )}
     </div>
   );
