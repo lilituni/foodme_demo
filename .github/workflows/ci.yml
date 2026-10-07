@@ -161,7 +161,10 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v6
         with:
-          context: apps/backend
+          # Repo root, like render.yaml and docker-compose: the backend image
+          # also builds and bundles the web + admin SPAs.
+          context: .
+          file: apps/backend/Dockerfile
           push: false
           tags: foodme-backend:ci
 
