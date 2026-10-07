@@ -44,7 +44,7 @@ jobs:
       - name: Remove any checked-in output files
         run: rm -f claude-output.md jira-issue.json
 
-      - name: Find Jira key in PR title, branch or body
+      - name: Find Jira key (PR title, branch, or explicit "Jira KEY" in body)
         id: key
         env:
           # Passed via env, never interpolated into the script: these are
@@ -53,7 +53,14 @@ jobs:
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          key=$(printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BRANCH" "$PR_BODY" \
+          # Title and branch name are trusted to name the ticket. In the body a
+          # key only counts when declared explicitly ("Jira: KAN-8",
+          # "Implements KAN-8", "Closes KAN-8") - a passing mention of another
+          # ticket must not select the wrong one.
+          explicit=$(printf '%s\n' "$PR_BODY" \
+            | grep -oiE '(jira|ticket|implements|closes|fixes|resolves)[: ]+[A-Z][A-Z0-9]+-[0-9]+' \
+            | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' || true)
+          key=$(printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BRANCH" "$explicit" \
             | grep -oE '\b[A-Z][A-Z0-9]+-[0-9]+\b' | grep -vE '^(FM|CHK)-' | head -n1 || true)
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Jira key: ${key:-<none>}"
