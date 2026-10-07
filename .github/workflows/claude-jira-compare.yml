@@ -44,7 +44,7 @@ jobs:
       - name: Remove any checked-in output files
         run: rm -f claude-output.md jira-issue.json
 
-      - name: Find Jira key in PR title, branch or body
+      - name: Find Jira key (PR title, branch, or explicit "Jira KEY" in body)
         id: key
         env:
           # Passed via env, never interpolated into the script: these are
@@ -53,7 +53,14 @@ jobs:
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          key=$(printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BRANCH" "$PR_BODY" \
+          # Title and branch name are trusted to name the ticket. In the body a
+          # key only counts when declared explicitly ("Jira: KAN-8",
+          # "Implements KAN-8", "Closes KAN-8") - a passing mention of another
+          # ticket must not select the wrong one.
+          explicit=$(printf '%s\n' "$PR_BODY" \
+            | grep -oiE '(jira|ticket|implements|closes|fixes|resolves)[: ]+[A-Z][A-Z0-9]+-[0-9]+' \
+            | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' || true)
+          key=$(printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BRANCH" "$explicit" \
             | grep -oE '\b[A-Z][A-Z0-9]+-[0-9]+\b' | grep -vE '^(FM|CHK)-' | head -n1 || true)
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Jira key: ${key:-<none>}"
@@ -116,14 +123,23 @@ jobs:
               ticket (say exactly how), ❌ not implemented, or
               ❓ cannot be verified from code (e.g. visual/mobile layout).
 
-            Step 3 - Inline comments (use mcp__github_inline_comment__create_inline_comment):
-            for every ⚠️ deviation, and for ❌ items where there is an obvious
-            place in the changed code, comment directly on the relevant ADDED
-            line in the diff. Start each comment with the requirement ID, e.g.
-            "**R8 ⚠️** Ticket says ... but this returns ...", then the fix.
+            Step 3 - Inline comments (use mcp__github_inline_comment__create_inline_comment).
+            Comment directly on the relevant ADDED line in the diff for each of:
+              a. every ⚠️ deviation, and ❌ item where there is an obvious place
+                 in the changed code - start with the requirement ID, e.g.
+                 "**R8 ⚠️** Ticket says ... but this returns ...", then the fix;
+              b. every "not in the ticket" item from your scope check (Step 4)
+                 that maps to a specific changed line - start with
+                 "**Not in ticket 🔎**", say what the code does beyond the
+                 ticket and whether it should stay, be split out, or be added
+                 to the ticket;
+              c. every ❓ item where specific changed code carries the risk
+                 (e.g. behaviour that existing features rely on) - start with
+                 "**<ID> ❓**" and say what to verify manually or in e2e.
             Only comment on lines that are part of this PR's diff. Max 12
-            inline comments, most important first. Do not add inline comments
-            for ✅ items.
+            inline comments, most important first (a, then b, then c). Never
+            add inline comments for ✅ items. In the summary, mark each item
+            that got an inline comment with "(see inline comment)".
 
             Step 4 - Write the summary in GitHub-flavoured Markdown to the file
             claude-output.md in the current directory:
@@ -137,7 +153,7 @@ jobs:
               (one row per requirement and acceptance criterion)
 
               ### Deviations from the ticket
-              Bullets for each ⚠️/❌ with the fix (mention "see inline comment").
+              Bullets for each ⚠️/❌ with the fix.
 
               ### Not in the ticket (scope check)
               Behaviour the PR adds that the ticket does not ask for, and items
