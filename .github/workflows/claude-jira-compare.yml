@@ -1,8 +1,10 @@
 # Homework step 3 - compare the Jira ticket with the PR's implementation.
 #
 # 1. Find the Jira key (e.g. KAN-8) in the PR title, branch name or body.
-# 2. Fetch that ticket from Jira (plain curl step - Claude never sees the
-#    Jira credentials).
+# 2. Claude fetches that ticket itself through a Jira MCP server
+#    (sooperset/mcp-atlassian in Docker, read-only, only the jira_get_issue
+#    tool enabled). The token reaches the MCP server via ${VAR} expansion in
+#    the MCP config - it is never written to disk.
 # 3. Claude compares the ticket's requirements / acceptance criteria with the
 #    code diff and
 #      - leaves INLINE comments on the changed lines that deviate from, or
@@ -42,7 +44,7 @@ jobs:
 
       # A PR could commit its own output/ticket files; never trust those.
       - name: Remove any checked-in output files
-        run: rm -f claude-output.md jira-issue.json
+        run: rm -f claude-output.md
 
       - name: Find Jira key (PR title, branch, or explicit "Jira KEY" in body)
         id: key
@@ -65,45 +67,76 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Jira key: ${key:-<none>}"
 
-      - name: Fetch Jira ticket
+      - name: Check Jira secrets
         id: jira
         if: steps.key.outputs.key != ''
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_KEY: ${{ steps.key.outputs.key }}
         run: |
           if [ -z "$JIRA_BASE_URL" ] || [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_API_TOKEN" ]; then
-            echo "status=no-secrets" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          # REST v2 returns the description as plain wiki text (v3 returns ADF JSON).
-          code=$(curl -sS -o jira-issue.json -w '%{http_code}' \
-            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -H 'Accept: application/json' \
-            "${JIRA_BASE_URL%/}/rest/api/2/issue/${JIRA_KEY}?fields=summary,description,issuetype,status,labels,priority")
-          echo "Jira HTTP $code"
-          if [ "$code" = "200" ]; then
-            echo "status=ok" >> "$GITHUB_OUTPUT"
+            echo "status=no-secrets" >> "$GITHUB_OUTPUT"
           else
-            rm -f jira-issue.json
-            echo "status=http-$code" >> "$GITHUB_OUTPUT"
+            echo "status=ok" >> "$GITHUB_OUTPUT"
           fi
+
+      # Pinned by digest so a new upstream image can't change what runs here.
+      - name: Prepare Jira MCP server
+        if: steps.jira.outputs.status == 'ok'
+        run: |
+          docker pull -q "$JIRA_MCP_IMAGE"
+          # No secrets in this file: ${JIRA_*} are expanded by Claude Code from
+          # the Claude step's env when it starts the server.
+          cat > "$RUNNER_TEMP/jira-mcp.json" <<EOF
+          {
+            "mcpServers": {
+              "jira": {
+                "command": "docker",
+                "args": ["run", "-i", "--rm",
+                         "-e", "JIRA_URL", "-e", "JIRA_USERNAME", "-e", "JIRA_API_TOKEN",
+                         "-e", "READ_ONLY_MODE", "-e", "ENABLED_TOOLS",
+                         "$JIRA_MCP_IMAGE"],
+                "env": {
+                  "JIRA_URL": "\${JIRA_BASE_URL}",
+                  "JIRA_USERNAME": "\${JIRA_EMAIL}",
+                  "JIRA_API_TOKEN": "\${JIRA_API_TOKEN}",
+                  "READ_ONLY_MODE": "true",
+                  "ENABLED_TOOLS": "jira_get_issue"
+                }
+              }
+            }
+          }
+          EOF
+        env:
+          JIRA_MCP_IMAGE: ghcr.io/sooperset/mcp-atlassian@sha256:5b7c9b64d4eb3210cab74be8bf3e6aeea9ed14f3042dc59ba5c5287bd4dbe466
 
       - name: Run Claude - Jira ticket vs implementation
         if: steps.jira.outputs.status == 'ok'
         uses: anthropics/claude-code-action@v1
+        env:
+          # Read only by Claude Code to expand ${...} in jira-mcp.json.
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: >-
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),mcp__github_inline_comment__create_inline_comment"
+            --mcp-config ${{ runner.temp }}/jira-mcp.json
+            --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),mcp__jira__jira_get_issue,mcp__github_inline_comment__create_inline_comment"
           prompt: |
             Pull request #${{ github.event.pull_request.number }} in
             ${{ github.repository }} implements Jira ticket
-            ${{ steps.key.outputs.key }}. The ticket, exactly as returned by the
-            Jira REST API, is in ./jira-issue.json (fields.summary,
-            fields.description, ...).
+            ${{ steps.key.outputs.key }}.
+
+            Step 0 - Fetch the ticket with the Jira MCP tool
+            mcp__jira__jira_get_issue (issue_key "${{ steps.key.outputs.key }}").
+            Use its summary and description. If the tool fails or the issue is
+            not found, write only a short claude-output.md that starts with
+            "## 🎫 Jira ${{ steps.key.outputs.key }} vs implementation" and
+            explains the error, then stop.
 
             Get the code change with:
               git diff ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}
