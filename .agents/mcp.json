@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "qase": {
+      "command": "cmd",
+      "args": ["/c", "agentsecrets", "env", "--", "npx", "-y", "@qase/mcp-server"]
+    },
+    "agentsecrets": {
+      "command": "cmd",
+      "args": ["/c", "agentsecrets", "mcp", "serve"]
+    },
+    "mcp-atlassian": {
+      "command": "uvx",
+      "args": ["mcp-atlassian@0.23.1"],
+      "env": {
+        "JIRA_URL": "${JIRA_BASE_URL}",
+        "JIRA_USERNAME": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+        "READ_ONLY_MODE": "true"
+      }
+    }
+  }
+}
