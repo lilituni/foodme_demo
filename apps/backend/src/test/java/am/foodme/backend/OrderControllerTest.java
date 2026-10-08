@@ -3,6 +3,7 @@ package am.foodme.backend;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -162,6 +163,7 @@ class OrderControllerTest {
     // CHK-10: chef 1 (marta-k, see data.sql) has free_delivery_from = 8000.0.
     // Delivery should be free when subtotal exactly equals that threshold, not
     // only when it exceeds it.
+    @Tag("known-bug") // seeded bug, still fails by design; excluded from mutation testing only
     @Test
     void deliveryPrice_subtotalEqualsFreeThreshold_isFree() throws Exception {
         Map<String, Object> body = Map.of(
@@ -181,6 +183,7 @@ class OrderControllerTest {
     // 3000. Chef 2 (not chef 1) deliberately, so it doesn't bump chef 1's
     // active-dish count and break DishControllerTest's exact-count assertion.
     @Order(6)
+    @Tag("known-bug") // seeded bug, still fails by design; excluded from mutation testing only
     @Test
     void createOrder_fractionalDishPrice_subtotalKeepsCents() throws Exception {
         Map<String, Object> body = Map.of(
@@ -203,6 +206,7 @@ class OrderControllerTest {
     // CHK-12: dish 3 belongs to chef 2 (ararat-grill, see data.sql), not chef 1.
     // Ordering it under chefId=1 should be rejected, not silently accepted.
     @Order(7)
+    @Tag("known-bug") // seeded bug, still fails by design; excluded from mutation testing only
     @Test
     void createOrder_dishFromDifferentChef_isRejected() throws Exception {
         Map<String, Object> body = Map.of(
