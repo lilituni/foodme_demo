@@ -39,6 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # for the gh pr commands the review runs
         with:
+          show_full_output: true # print the review's reasoning in the job log
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
