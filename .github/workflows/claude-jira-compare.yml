@@ -9,8 +9,10 @@
 #    code diff and
 #      - leaves INLINE comments on the changed lines that deviate from, or
 #        only partly implement, the ticket (bonus requirement), and
-#      - writes a summary (requirement-by-requirement traceability) that is
-#        posted as one sticky PR comment, updated on every push.
+#      - writes a summary from .github/jira-review-templates/passed.md or
+#        failed.md (requirement-by-requirement traceability), posted as one
+#        sticky PR comment. A FAILED review (any ❌ missing or ⚠️ deviating
+#        requirement) also fails this check.
 #
 # Secrets (Settings > Secrets and variables > Actions):
 #   CLAUDE_CODE_OAUTH_TOKEN  - created by /install-github-app
@@ -148,23 +150,20 @@ jobs:
             add inline comments for ✅ items. In the summary, mark each item
             that got an inline comment with "(see inline comment)".
 
-            Step 4 - Write the summary in GitHub-flavoured Markdown to the file
-            claude-output.md in the current directory:
-
-              ## 🎫 Jira ${{ steps.key.outputs.key }} vs implementation
-              **Ticket:** <summary> · **Coverage:** X/Y implemented, N partial, M missing
-              One-sentence verdict.
-
-              ### Requirement traceability
-              | ID | Requirement (short) | Status | Where / note |
-              (one row per requirement and acceptance criterion)
-
-              ### Deviations from the ticket
-              Bullets for each ⚠️/❌ with the fix.
-
-              ### Not in the ticket (scope check)
-              Behaviour the PR adds that the ticket does not ask for, and items
-              the ticket marks out of scope that the PR implements anyway.
+            Step 4 - Decide the verdict and write the summary from a template.
+              PASSED = no ❌ missing and no ⚠️ partial/deviating items.
+                       (❓ "needs manual verification" and "not in the
+                       ticket" items do not fail the review.)
+              FAILED = at least one ❌ or ⚠️.
+            Read the matching template and fill it in:
+              PASSED -> .github/jira-review-templates/passed.md
+              FAILED -> .github/jira-review-templates/failed.md
+            Replace every {placeholder}, one table row per requirement and
+            acceptance criterion, KEY = ${{ steps.key.outputs.key }}. Keep the
+            template's first line (the hidden <!-- jira-review: ... --> marker)
+            exactly as it is - the workflow uses it to pass or fail the check.
+            Write the result to the file claude-output.md in the current
+            directory.
 
             Keep the summary under ~900 words. Do not post the summary yourself.
 
@@ -205,3 +204,12 @@ jobs:
         with:
           header: claude-jira-compare
           path: claude-output.md
+
+      # The template Claude picked carries a hidden marker; FAILED fails the check
+      # (after the comment is posted, so the reasons are always visible).
+      - name: Fail the check when the Jira review FAILED
+        run: |
+          if grep -q '<!-- jira-review: failed -->' claude-output.md; then
+            echo "::error::Implementation does not match the Jira ticket - see the Jira review comment on the PR"
+            exit 1
+          fi
