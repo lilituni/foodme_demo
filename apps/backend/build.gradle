@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.4'
     id 'io.spring.dependency-management' version '1.1.6'
+    id 'info.solidsoft.pitest' version '1.15.0'
 }
 
 group = 'am.foodme'
@@ -58,4 +59,22 @@ tasks.named('test') {
     testLogging {
         events 'passed', 'failed', 'skipped'
     }
+}
+
+// Mutation testing (PIT). Run: gradle pitest [-PpitTargetClasses=a.B,c.D]
+// CI (.github/workflows/mutation-testing.yml) passes only the classes a PR
+// changed and enforces the 80% mutation-score gate from the XML report.
+pitest {
+    pitestVersion = '1.16.1'
+    junit5PluginVersion = '1.2.1'
+    targetClasses = (project.findProperty('pitTargetClasses') ?: 'am.foodme.backend.service.*').toString().split(',').toList()
+    // Integration tests (MockMvc) exercise the services, so run the whole suite
+    // against every mutated class, not only same-named test classes.
+    targetTests = ['am.foodme.backend.*']
+    // Seeded course bugs (FM-BUG-*) fail on purpose; PIT needs a green suite.
+    excludedGroups = ['known-bug']
+    outputFormats = ['XML', 'HTML']
+    timestampedReports = false
+    threads = 2
+    timeoutConstInMillis = 10000
 }

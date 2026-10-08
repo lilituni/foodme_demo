@@ -1,0 +1,132 @@
+# Homework step 5 - mutation testing of the backend with PIT (pitest).
+#
+# PIT makes small changes ("mutants") to production code - flips a condition,
+# changes a boundary, returns null - and reruns the tests. A mutant the tests
+# catch is "killed"; one they miss "survived". Mutation score = detected
+# mutants / all mutants. This check PASSES when the score is >= 80%.
+#
+# On a PR only the backend logic classes the PR changed are mutated
+# (service/, controller/, security/, utils/, exceptionHandler/), which keeps
+# the run to minutes and the result about this change. "Run workflow" (manual)
+# mutates any class pattern, default all services.
+#
+# Tests tagged @Tag("known-bug") (seeded FM-BUG-* tests that fail by design)
+# are excluded via build.gradle - PIT needs a green suite to start.
+name: Mutation Testing
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/mutation-testing.yml"
+      - ".github/scripts/pitest_report.py"
+  workflow_dispatch:
+    inputs:
+      target_classes:
+        description: "Comma-separated PIT class patterns to mutate"
+        default: "am.foodme.backend.service.*"
+
+concurrency:
+  group: mutation-testing-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MUTATION_THRESHOLD: "80"
+
+jobs:
+  pitest:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    name: Mutation score >= 80%
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write # sticky result comment
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need base + head for the changed-file list
+
+      - name: Choose classes to mutate
+        id: targets
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TARGETS: ${{ inputs.target_classes }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            targets="$INPUT_TARGETS"
+          else
+            # Changed (added/modified) backend logic classes -> fully-qualified names.
+            targets=$(git diff --name-only --diff-filter=AM "$BASE_SHA...$HEAD_SHA" -- apps/backend/src/main/java \
+              | grep -E '/(service|controller|security|utils|exceptionHandler)/.*\.java$' \
+              | sed -E 's#^apps/backend/src/main/java/##; s#\.java$##; s#/#.#g' \
+              | paste -sd, - || true)
+          fi
+          echo "classes=$targets" >> "$GITHUB_OUTPUT"
+          echo "Mutating: ${targets:-<nothing>}"
+
+      - name: Set up JDK 17
+        if: steps.targets.outputs.classes != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        if: steps.targets.outputs.classes != ''
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: apps/backend
+
+      - name: Run PIT
+        if: steps.targets.outputs.classes != ''
+        working-directory: apps/backend
+        env:
+          TARGETS: ${{ steps.targets.outputs.classes }}
+        run: ./gradlew pitest "-PpitTargetClasses=$TARGETS" --console=plain
+
+      - name: Score and report
+        id: score
+        if: steps.targets.outputs.classes != ''
+        run: |
+          python3 .github/scripts/pitest_report.py \
+            apps/backend/build/reports/pitest/mutations.xml \
+            "$MUTATION_THRESHOLD" mutation-report.md >> "$GITHUB_OUTPUT"
+          cat mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Nothing to mutate
+        if: steps.targets.outputs.classes == ''
+        run: |
+          printf '## 🧬 Mutation testing (PIT)\n\n**Result:** ✅ Skipped — this PR changes no backend logic classes (service / controller / security / utils / exceptionHandler).\n' > mutation-report.md
+          cat mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: PIT failed to run
+        if: failure() && steps.score.outcome != 'success'
+        run: |
+          printf '## 🧬 Mutation testing (PIT)\n\n**Result:** ❌ PIT did not complete (failing test suite or build error). See the [workflow run](%s).\n' \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > mutation-report.md
+
+      - name: Upload HTML report
+        if: (success() || failure()) && steps.targets.outputs.classes != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-report
+          path: apps/backend/build/reports/pitest/
+          if-no-files-found: ignore
+
+      - name: Post / update PR comment
+        if: (success() || failure()) && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: mutation-testing
+          path: mutation-report.md
+
+      - name: Enforce mutation score >= 80%
+        if: steps.score.outputs.passed == 'false'
+        run: |
+          echo "::error::Mutation score ${{ steps.score.outputs.score }}% is below the ${MUTATION_THRESHOLD}% threshold"
+          exit 1
