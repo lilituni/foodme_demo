@@ -46,7 +46,17 @@ jobs:
 
       # A PR could commit its own output/ticket files; never trust those.
       - name: Remove any checked-in output files
-        run: rm -f claude-output.md
+        run: rm -f claude-output.md existing-inline-comments.jsonl
+
+      # Inline comments earlier runs already left; Claude skips repeats of these.
+      - name: List inline comments already on this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/comments"             --jq '.[] | select(.user.login == "github-actions[bot]")
+                  | {path, line: (.line // .original_line), body: (.body | .[0:300])}'             > existing-inline-comments.jsonl
+          echo "Existing bot inline comments: $(wc -l < existing-inline-comments.jsonl)"
 
       - name: Find Jira key (PR title, branch, or explicit "Jira KEY" in body)
         id: key
@@ -149,6 +159,13 @@ jobs:
             inline comments, most important first (a, then b, then c). Never
             add inline comments for ✅ items. In the summary, mark each item
             that got an inline comment with "(see inline comment)".
+
+            Do not repeat inline comments: ./existing-inline-comments.jsonl lists
+            the inline comments earlier runs already left on this PR (JSON lines:
+            path, line, body). Skip a finding when an existing comment on the same
+            path within ~3 lines already makes the same point (same requirement ID /
+            same issue), even if the wording would differ. Post only new findings.
+            The written report still lists every finding.
 
             Step 4 - Decide the verdict and write the summary from a template.
               PASSED = no ❌ missing and no ⚠️ partial/deviating items.

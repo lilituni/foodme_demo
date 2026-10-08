@@ -130,6 +130,10 @@ condition). No speculative or style-only nitpicks.
    `**[Major] Weak test oracle** asserts only 200; the rule under test is the
    rounded average - assert $.rating == 4.3`. Max 10, most severe first.
    Never comment on unchanged lines or on production code.
+   **No repeats:** if you are given the inline comments already on the PR
+   (CI provides `existing-inline-comments.jsonl`), skip any finding an
+   existing comment on the same file within ~3 lines already raises, even if
+   you would word it differently. Only post new findings.
 2. **Report** - fill in `templates/report.md` (next to this file) and write
    it to the path you were given (default `claude-output.md`). Keep it under
    ~800 words. Missing test cases go in the report as ready-to-write
