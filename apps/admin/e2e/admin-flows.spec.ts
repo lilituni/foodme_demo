@@ -41,7 +41,8 @@ async function createOrderViaApi(request: import("@playwright/test").APIRequestC
     },
   });
   expect(createRes.ok()).toBeTruthy();
-  return createRes.json();
+  // customerToken lets ratings tests act as the ordering customer.
+  return { ...(await createRes.json()), customerToken: token };
 }
 
 test.describe("Admin auth", () => {
@@ -115,5 +116,35 @@ test.describe("Admin resources", () => {
     await expect(page).toHaveURL(/#\/dishes/);
     await page.getByRole("menuitem", { name: "Orders" }).click();
     await expect(page).toHaveURL(/#\/orders/);
+  });
+});
+
+// KAN-8 Order ratings - admin order details show the customer's review (R20).
+test.describe("Admin order review", () => {
+  test("delivered + reviewed order shows the customer review", async ({ page, request }) => {
+    const order = await createOrderViaApi(request);
+    const login = await request.post(`${API}/admin/auth/login`, {
+      data: { username: "admin", password: "admin123" },
+    });
+    const { token: adminToken } = await login.json();
+    const { id } = await (await request.get(`${API}/api/order/number/${order.number}`)).json();
+    for (const status of ["ACCEPTED", "DELIVERED"]) {
+      const res = await request.patch(`${API}/admin/order/${id}/status`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        data: { status },
+      });
+      expect(res.ok()).toBeTruthy();
+    }
+    const review = await request.post(`${API}/api/customer/orders/${order.number}/review`, {
+      headers: { Authorization: `Bearer ${order.customerToken}` },
+      data: { rating: 4, comment: "Admin can see this" },
+    });
+    expect(review.ok()).toBeTruthy();
+
+    await loginAsAdmin(page);
+    await page.goto(`/#/orders/${id}/show`);
+    const section = page.getByRole("region", { name: "Customer review" });
+    await expect(section.getByText("4/5")).toBeVisible({ timeout: 15000 });
+    await expect(section.getByText("Admin can see this")).toBeVisible();
   });
 });

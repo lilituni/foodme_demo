@@ -208,7 +208,9 @@ class OrderReviewControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("Rating must be a whole number from 1 to 5"));
         }
-        review(customer, number, "five", null).andExpect(status().isBadRequest());
+        review(customer, number, "five", null)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed request body"));
 
         // None of the refused attempts consumed the order's single review.
         review(customer, number, 2, null).andExpect(status().isOk());
@@ -240,5 +242,76 @@ class OrderReviewControllerTest {
         // (5 + 4 + 4) / 3 = 4.333... -> 4.3
         review(customer, insertOrder(customer, AVERAGE_CHEF_ID, "DELIVERED"), 4, null).andExpect(status().isOk());
         mockMvc.perform(get("/api/chef/" + AVERAGE_CHEF_ID)).andExpect(jsonPath("$.rating").value(4.3));
+    }
+
+    @Test
+    void review_ratingOne_isAccepted() throws Exception {
+        TestCustomer customer = registerCustomer();
+        String number = insertOrder(customer, CHEF_ID, "DELIVERED");
+
+        // Lower valid boundary (0 is refused in review_invalidRatings_areRejected).
+        review(customer, number, 1, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rating").value(1));
+    }
+
+    @Test
+    void review_blankComment_isStoredAsNull() throws Exception {
+        TestCustomer customer = registerCustomer();
+        String number = insertOrder(customer, CHEF_ID, "DELIVERED");
+
+        review(customer, number, 4, "   ")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comment").doesNotExist());
+    }
+
+    @Test
+    void review_withAdminToken_isForbidden() throws Exception {
+        TestCustomer customer = registerCustomer();
+        String number = insertOrder(customer, CHEF_ID, "DELIVERED");
+        String adminResponse = mockMvc.perform(post("/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "admin",
+                                "password", "admin123"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String adminToken = objectMapper.readTree(adminResponse).get("token").asText();
+
+        mockMvc.perform(post("/api/customer/orders/" + number + "/review")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("rating", 5))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/order/number/" + number))
+                .andExpect(jsonPath("$.review").doesNotExist());
+    }
+
+    @Test
+    void refusedReview_leavesChefRatingUnchanged() throws Exception {
+        TestCustomer customer = registerCustomer();
+        String number = insertOrder(customer, CHEF_ID, "NEW");
+        Double before = chefRepository.findById(CHEF_ID).orElseThrow().getRating();
+
+        review(customer, number, 1, null).andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/chef/" + CHEF_ID))
+                .andExpect(jsonPath("$.rating").value(before));
+    }
+
+    // Regression for the global HttpMessageNotReadableException handler added
+    // with this feature: other endpoints now answer malformed JSON with 400.
+    @Test
+    void malformedJson_onExistingEndpoint_returns400() throws Exception {
+        TestCustomer customer = registerCustomer();
+
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + customer.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{not json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed request body"));
     }
 }
