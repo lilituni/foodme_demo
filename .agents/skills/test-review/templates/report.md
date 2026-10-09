@@ -1,3 +1,4 @@
+<!-- test-review-verdict: {pass|fail} -->
 ## 🧪 Test review (ISTQB)
 
 **Test verdict:** ✅ Adequately tested | ⚠️ Gaps to close | ❌ Insufficiently tested

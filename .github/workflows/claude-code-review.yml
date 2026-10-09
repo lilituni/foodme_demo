@@ -7,6 +7,12 @@
 # low-confidence findings, and with --comment posts its findings on the PR as
 # inline comments.
 #
+# Quality gate: the check fails when this run posted any issue as an inline
+# comment (counted from the run's transcript). It passes on "No issues found"
+# and when /code-review skips a PR it has already reviewed - unresolved
+# comments from earlier runs are enforced by "Require conversation
+# resolution" in the branch protection rule.
+#
 # Auth: CLAUDE_CODE_OAUTH_TOKEN repo secret (created by /install-github-app).
 name: Claude Code Review
 
@@ -35,6 +41,7 @@ jobs:
           fetch-depth: 1
 
       - name: Run /code-review
+        id: review
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # for the gh pr commands the review runs
@@ -46,3 +53,31 @@ jobs:
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"'
+
+      - name: "Quality gate: no issues found"
+        env:
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, sys
+
+          def tool_uses(node):
+              if isinstance(node, dict):
+                  if node.get("type") == "tool_use":
+                      yield node.get("name", "")
+                  for v in node.values():
+                      yield from tool_uses(v)
+              elif isinstance(node, list):
+                  for v in node:
+                      yield from tool_uses(v)
+
+          path = os.environ.get("EXECUTION_FILE", "")
+          if not path or not os.path.exists(path):
+              print("::error::No review transcript found"); sys.exit(1)
+          issues = sum(1 for n in tool_uses(json.load(open(path)))
+                       if n.endswith("create_inline_comment"))
+          print(f"Inline issues posted by this review: {issues}")
+          if issues:
+              print(f"::error::Code review found {issues} issue(s) - see the inline comments on the PR")
+              sys.exit(1)
+          EOF

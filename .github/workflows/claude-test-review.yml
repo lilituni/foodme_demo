@@ -7,6 +7,7 @@
 #
 # Output: inline comments on problematic test lines + one sticky report
 # comment (from the skill's templates/report.md), updated on every push.
+# Quality gate: the check fails unless the verdict is ✅ Adequately tested.
 # Static review only - the CI workflow is what actually runs the tests.
 # Auth: CLAUDE_CODE_OAUTH_TOKEN repo secret (created by /install-github-app).
 name: Claude Test Review
@@ -91,3 +92,12 @@ jobs:
         with:
           header: claude-test-review
           path: claude-output.md
+
+      # Quality gate: the report's hidden marker decides the check (posted first,
+      # so the reasons are always on the PR).
+      - name: "Quality gate: tests must be adequate"
+        run: |
+          if ! grep -q '<!-- test-review-verdict: pass -->' claude-output.md; then
+            echo "::error::Test review did not pass (verdict ⚠️/❌ or no report) - see the test review comment on the PR"
+            exit 1
+          fi
