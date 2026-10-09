@@ -102,16 +102,22 @@ jobs:
       # ("PR head is untrusted") but skips symlinks, and ours is a symlink to
       # .agents/mcp.json - so it would start with no MCP servers. Load the Jira
       # server explicitly, from the base branch (same trust rule as the action),
-      # keeping only that one entry.
+      # keeping only that one entry. It must be passed as INLINE JSON: the
+      # action merges inline --mcp-config JSON with its own servers but drops a
+      # --mcp-config file path when it has its own config.
       - name: Jira MCP config from base branch
+        id: mcpcfg
         if: steps.jira.outputs.status == 'ok'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          git show "$BASE_SHA:.agents/mcp.json" \
-            | jq '{mcpServers: {"mcp-atlassian": .mcpServers["mcp-atlassian"]}}' \
-            > "$RUNNER_TEMP/jira-mcp.json"
-          jq -e '.mcpServers["mcp-atlassian"].command' "$RUNNER_TEMP/jira-mcp.json"
+          json=$(git show "$BASE_SHA:.agents/mcp.json" \
+            | jq -c '{mcpServers: {"mcp-atlassian": .mcpServers["mcp-atlassian"]}}')
+          echo "$json" | jq -e '.mcpServers["mcp-atlassian"].command' > /dev/null
+          # It goes inside single quotes in claude_args.
+          case "$json" in *"'"*) echo "::error::MCP config must not contain single quotes"; exit 1 ;; esac
+          echo "json=$json" >> "$GITHUB_OUTPUT"
+          echo "$json"
 
       - name: Run Claude - Jira ticket vs implementation
         if: steps.jira.outputs.status == 'ok'
@@ -122,11 +128,12 @@ jobs:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         with:
+          show_full_output: true # MCP server status + Claude's steps in the job log
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: >-
             --max-turns 60
-            --mcp-config ${{ runner.temp }}/jira-mcp.json
+            --mcp-config '${{ steps.mcpcfg.outputs.json }}'
             --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),mcp__mcp-atlassian__jira_get_issue,mcp__github_inline_comment__create_inline_comment"
           prompt: |
             Pull request #${{ github.event.pull_request.number }} in
