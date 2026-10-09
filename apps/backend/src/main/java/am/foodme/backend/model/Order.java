@@ -72,4 +72,7 @@ public class Order {
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderDish> orderDishList;
+
+    @OneToOne(mappedBy = "order")
+    private OrderReview review;
 }
