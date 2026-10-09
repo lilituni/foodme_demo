@@ -17,10 +17,9 @@ name: Mutation Testing
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - "apps/backend/**"
-      - ".github/workflows/mutation-testing.yml"
-      - ".github/scripts/pitest_report.py"
+    # No paths filter on purpose: this is a required quality gate, and a
+    # required check that never starts blocks the merge. With nothing to
+    # mutate the job reports "Skipped" in seconds.
   workflow_dispatch:
     inputs:
       target_classes:
