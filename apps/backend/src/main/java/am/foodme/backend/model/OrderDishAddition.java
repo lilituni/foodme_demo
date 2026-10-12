@@ -6,14 +6,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "order_dish_addition", schema = "foodme")
 public class OrderDishAddition {
 
+    // The column has no identity/default in V1__init.sql - ids come from this sequence.
+    // (IDENTITY made every order with an extra fail on Postgres; H2 masked it.)
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @SequenceGenerator(name = "order_dish_addition_id_seq", sequenceName = "foodme.order_dish_addition_id_seq", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "order_dish_addition_id_seq")
     private Long id;
 
     private String nameEn;
