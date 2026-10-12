@@ -75,10 +75,13 @@ Write `spec.yaml` back whole with the Write tool (see "Writing run files" in the
 ### Fixing a judge FAIL
 
 Fix exactly what each FAIL's `reason` and quotes name; don't touch cases or
-fields that passed. Two FAILs are **not yours to fix**, so leave them for the human:
+fields that passed. These FAILs are **not yours to fix** - they belong to an
+earlier step, so leave them for the human (see "Feedback loops" in the
+pipeline skill):
 
+- **J1** (an AC misquoted) - `acs` belong to step 01; only re-opening it can re-copy them.
 - **J2** (a gap with no question) - only re-opening step 01 can add a question.
-- **J7** (the cases disagree with the approved plan) when the plan itself is wrong - only re-opening step 02 can change the plan.
+- **J7** (the cases disagree with the approved plan) when the plan itself is wrong - only re-opening step 02 can change the plan. If the *cases* are what's wrong, fix them.
 
 UNSURE checks are for the human, not for you.
 
@@ -91,11 +94,11 @@ Set `R/status` to `🧑04 · review N cases`. Show in chat:
 - Every verdict file in order, and every non-PASS check: `check | item | reason`, with both quotes; and any obstacles (`what | problem | needs`).
 
 Then ask with **AskUserQuestion**: `Approve cases` / `Request changes` / `Stop here`.
-With an open J2 FAIL add `Re-open requirements (step 01)`; with an open J7 FAIL
-caused by the plan, add `Re-open the plan (step 02)`.
+With an open J1 or J2 FAIL add `Re-open requirements (step 01)`; with an open
+J7 FAIL caused by the plan, add `Re-open the plan (step 02)`.
 
 - `Request changes`: apply the notes (same rules), run the judge again (a new verdict file), and ask again.
-- `Re-open requirements` / `Re-open the plan`: change nothing; end with `STATUS: NEEDS_HUMAN: re-run /requirements-gathering <T>` (or `/test-planning <T>`). Delete that step's gate entry only after the human confirms in chat.
+- `Re-open requirements` / `Re-open the plan`: change no case; follow "Re-opening a step" in the pipeline skill (gate entries removed only after the human confirms, reason recorded under `reopened:`), and end with `STATUS: NEEDS_HUMAN: re-run /requirements-gathering <T>` (or `/test-planning <T>`).
 - `Approve`: add the `cases` entry to `R/gates.yaml` (keep the other entries): `{ approved: true, by: <git config user.name>, at: <UTC now from date -u>, note: "judge 04-NN <verdict>" + the human's note }`. Set every case's `status: accepted`.
 - `Stop here`: end with `NEEDS_HUMAN`.
 

@@ -99,6 +99,28 @@ reads. No bug is filed in Jira before a human approves it in step 09.
 
 **Never set a gate yourself to keep the flow moving.** A gate is written only by the step, right after the human picks "Approve".
 
+## Feedback loops (going back)
+
+A judge or a later step can find a problem that an *earlier, approved* step
+owns. The rule: **a step fixes only its own output; anything earlier is
+re-opened only by the human.**
+
+| Found in | Problem | Owner | What happens |
+|---|---|---|---|
+| 04 case-judge | J3–J6: a case's expected value, steps, scope or duplication | 03 | 03 fixes the case and re-runs the judge (max 2 rounds). No going back. |
+| 04 case-judge | J1: an AC misquoted in `spec.yaml` | 01 | Human: `Re-open requirements (step 01)` |
+| 04 case-judge | J2: a gap in the sources with no question | 01 | Human: `Re-open requirements` to add and answer the question, or approve the cases as they are |
+| 04 case-judge | J7: the cases disagree with the plan **because the plan is wrong** | 02 | Human: `Re-open the plan (step 02)`; if the *cases* are wrong, 03 fixes them |
+| 07 test-judge | a test doesn't match its approved case | 06 | 06 fixes the test and re-runs the judge |
+| 09 triage | a failure caused by a wrong test | 06 | back to 06 (approved by the human in triage) |
+| 09 triage | a failure caused by a spec gap | 01 | back to 01 (approved by the human in triage) |
+
+Re-opening a step:
+
+1. The human picks the re-open option in a review (AskUserQuestion). The step ends with `NEEDS_HUMAN: re-run /<step skill> <T>`.
+2. The human confirms in chat; then remove that step's gate entry from `gates.yaml` **and the gates of every later step**, and record why under `reopened:` in `gates.yaml` (`{ step, by, at, reason }`) so the history isn't lost.
+3. On the next `/feature-testing-pipeline <T>`, the resume check finds that step unfinished and starts there. Files of later steps are kept as drafts: those steps re-check them against the changed input instead of starting from scratch.
+
 ## Status line (`R/status`)
 
 The status line (`workflows/statusline.sh`) shows the first line of `R/status`.
