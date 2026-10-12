@@ -50,13 +50,17 @@ first, change it, write it back). Don't patch YAML with shell heredocs or inline
 `node -e` / `sed` scripts: quoting and Windows line endings break them. The one
 exception is the one-line `status` file, which may be written with `echo`.
 
+**Timestamps come from the clock, never from your head.** Before writing any
+`at:` / `answered_at:` / `Started:` value, run `date -u +%Y-%m-%dT%H:%M:%SZ` and
+copy its output. A made-up time breaks the audit trail in `gates.yaml`.
+
 ## Steps
 
 | # | ISTQB activity | Step skill | Produces | Human gate (`gates.yaml` key) | Built |
 |---|---|---|---|---|---|
 | 01 | Test analysis (test basis review) | `requirements-gathering` | `spec.yaml`: ACs, out of scope, gap questions | answers to gap questions, then approve → `requirements` | ✅ |
 | 02 | Test planning | `test-planning` | `plan.md` | approve → `plan` | ✅ |
-| 03 + 04 | Test design + review | `test-case-design` (calls subagent `case-judge`) | `test_cases` in `spec.yaml`, `verdicts/04-*` | approve → `cases` | ⏳ |
+| 03 + 04 | Test design + review | `test-case-design` (calls subagent `case-judge`) | `test_cases` in `spec.yaml`, `verdicts/04-*` | approve → `cases` | ✅ |
 | 05 | Test execution (manual) | `test-execution` | `execution.md`, per-case result + confidence | check every case the agent isn't sure about → `manual_check` | ⏳ |
 | 06 + 07 | Test implementation + review | `test-automation` (calls subagent `test-judge`) | Playwright / JUnit tests, `verdicts/07-*` | approve → `tests` | ⏳ |
 | 08 | Test execution (automated) | `run-regression`, scoped to this feature | `results.json` | - | ⏳ |
