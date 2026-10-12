@@ -53,10 +53,8 @@ public class PromoCodeService {
                     "Add " + formatAmount(missing) + " AMD more to use this code");
         }
 
-        // Discount base: the cart subtotal, per AC-2 ("reduces the subtotal by the
-        // code's percentage"). NOTE: the KAN-28 implementation note says "on the
-        // order total including the delivery fee" - the two conflict for paid
-        // delivery; this follows the acceptance criterion pending clarification.
+        // Discount base: the cart subtotal only, never the delivery fee (AC-2;
+        // confirmed by the product owner over the conflicting KAN-28 note).
         double discount = roundCents(subtotal * promo.getPercentOff() / 100.0);
         quote.setApplies(true);
         quote.setDiscount(discount);
