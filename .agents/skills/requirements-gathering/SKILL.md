@@ -9,7 +9,11 @@ Argument: `T`, the Jira story key. Run dir `R = agentic-workflows/functional-tes
 You write `R/spec.yaml`, and the `requirements` entry of `R/gates.yaml` after the
 human approves. The human never edits these files; they answer and review in chat.
 
-If `R/spec.yaml` already has `acs`, skip to section 3 (a resumed review).
+If `R/spec.yaml` already has `acs`, skip to section 3 (a resumed review) -
+unless `R/gates.yaml` has a `reopened` entry for step `01` and no
+`requirements` gate: then first apply that entry's `reason` (re-copy a
+misquoted AC from its source, or add the missing question), show what changed,
+and go to section 3.
 
 ## 1. Read the test basis - and only that
 

@@ -9,7 +9,10 @@ Argument: `T`. Run dir `R = agentic-workflows/functional-testing/runs/<T>/`.
 You write `R/plan.md` (one plan per feature), and the `plan` entry of
 `R/gates.yaml` after the human approves.
 
-If `R/plan.md` already exists, skip to "Human review" (a resumed review).
+If `R/plan.md` already exists, skip to "Human review" (a resumed review) -
+unless `R/gates.yaml` has a `reopened` entry for step `02` and no `plan` gate:
+then first apply that entry's `reason` to `plan.md`, show what changed, and go
+to "Human review".
 
 ## Gate
 

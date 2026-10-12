@@ -120,6 +120,7 @@ Re-opening a step:
 1. The human picks the re-open option in a review (AskUserQuestion). The step ends with `NEEDS_HUMAN: re-run /<step skill> <T>`.
 2. The human confirms in chat; then remove that step's gate entry from `gates.yaml` **and the gates of every later step**, and record why under `reopened:` in `gates.yaml` (`{ step, by, at, reason }`) so the history isn't lost.
 3. On the next `/feature-testing-pipeline <T>`, the resume check finds that step unfinished and starts there. Files of later steps are kept as drafts: those steps re-check them against the changed input instead of starting from scratch.
+4. A re-opened step that finds its own file already written must **first apply the newest `reopened` reason for that step** to the file, show the change in chat, and only then run its human review. It never re-approves an unchanged file.
 
 ## Status line (`R/status`)
 
