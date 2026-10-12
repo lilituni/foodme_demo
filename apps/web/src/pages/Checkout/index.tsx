@@ -6,6 +6,8 @@ import { foodmeApi } from "@/api/foodme";
 import { AuthPanel } from "@/components/sections/auth-panel";
 import { CheckoutSummary } from "@/components/sections/checkout-summary";
 import { CheckoutPriceSummary } from "@/components/sections/checkout-price-summary";
+import { PromoCodeField } from "@/components/sections/promo-code-field";
+import { ApiRequestError } from "@/api/client";
 import { OrderDeliveryForm } from "@/components/sections/order-delivery-form";
 import { Button } from "@/components/ui/button";
 import { useCart, clearCart } from "@/hooks/useCart";
@@ -37,6 +39,28 @@ export default function Checkout() {
 
   const deliveryPrice = deliveryPriceQuery.data?.deliveryPrice ?? 0;
   const freeDeliveryFrom = deliveryPriceQuery.data?.freeDeliveryFrom ?? 0;
+
+  // KAN-11: one code per order. The server prices it, and re-prices it whenever the
+  // cart or delivery method changes; applying another code simply replaces it.
+  // Lives only in this page's state - never persisted across sessions.
+  const [promoCode, setPromoCode] = useState<string | null>(null);
+  const promoQuery = useQuery({
+    queryKey: ["promo-code", promoCode, chefId, subtotal, deliveryMethod],
+    queryFn: () =>
+      foodmeApi.quotePromoCode({
+        code: promoCode as string,
+        chefId: chefId as number,
+        subtotal,
+        deliveryMethod,
+      }),
+    enabled: promoCode !== null && chefId !== undefined && subtotal > 0,
+    // While the same code re-prices (cart or delivery method changed), keep its last
+    // quote - otherwise "Place order" pressed mid-refetch would drop the code. Never
+    // carry a quote over to a different code. The server re-checks on placement.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === promoCode ? previous : undefined,
+  });
+  const appliedPromo = promoCode !== null && promoQuery.data?.applies ? promoQuery.data : null;
 
   const handleSubmit = async (values: CheckoutFormValues) => {
     if (chefId === undefined) return;
@@ -71,14 +95,20 @@ export default function Checkout() {
         quantity: item.quantity,
         additions: item.additions?.map((a) => ({ additionId: a.id })),
       })),
+      promoCode: appliedPromo?.code ?? null,
     };
 
     try {
       const order = await foodmeApi.createOrder(payload);
       await clearCart();
       navigate(`/orders/success?number=${order.number}`);
-    } catch {
-      setSubmitError("We could not place your order. Please try again.");
+    } catch (error) {
+      // A 400 carries a reason worth showing (e.g. the promo code stopped applying).
+      setSubmitError(
+        error instanceof ApiRequestError && error.status === 400 && error.message
+          ? error.message
+          : "We could not place your order. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -160,11 +190,19 @@ export default function Checkout() {
           <div className="bezel-outer shadow-diffuse">
             <div className="bezel-inner overflow-hidden">
               <CheckoutSummary items={items} embedded />
+              <PromoCodeField
+                quote={promoCode !== null ? promoQuery.data : undefined}
+                isChecking={promoCode !== null && promoQuery.isFetching}
+                isError={promoCode !== null && promoQuery.isError}
+                onApply={setPromoCode}
+                onRemove={() => setPromoCode(null)}
+              />
               <CheckoutPriceSummary
                 embedded
                 subtotal={subtotal}
                 deliveryPrice={deliveryMethod === "TAKEAWAY" ? 0 : deliveryPrice}
                 freeDeliveryFrom={freeDeliveryFrom}
+                promo={appliedPromo ? { code: appliedPromo.code, discount: appliedPromo.discount } : null}
                 isLoading={deliveryMethod === "DELIVERY" && deliveryPriceQuery.isLoading}
                 isError={deliveryMethod === "DELIVERY" && deliveryPriceQuery.isError}
               />

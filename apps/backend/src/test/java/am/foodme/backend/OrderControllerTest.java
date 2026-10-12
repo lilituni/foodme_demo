@@ -245,4 +245,89 @@ class OrderControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isNotFound());
     }
+
+    // KAN-11: placing an order with a promo code. Ordered after the FM-FLAKE-02
+    // cases because placing an order consumes order_number_seq.
+    private Map<String, Object> promoOrder(int quantity, String promoCode) {
+        Map<String, Object> body = new java.util.HashMap<>(Map.of(
+                "chefId", 1,
+                "receiverName", "Ann",
+                "receiverPhoneNumber", "+37491234567",
+                "receiverEmail", "ann@example.com",
+                "paymentType", "CASH",
+                "deliveryMethod", "TAKEAWAY",
+                "createOrderDishes", List.of(Map.of("dishId", 1, "quantity", quantity))
+        ));
+        body.put("promoCode", promoCode);
+        return body;
+    }
+
+    @Order(20)
+    @Test
+    void createOrder_withValidPromoCode_savesCodeAndDiscount() throws Exception {
+        String token = customerToken();
+        // 2 x Lavash Wrap (1,800) = 3,600 subtotal; SAVE10 -> 360 off.
+        String response = mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(promoOrder(2, " save10 "))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPrice").value(3240.0))
+                .andReturn().getResponse().getContentAsString();
+        String number = objectMapper.readTree(response).get("number").asText();
+
+        mockMvc.perform(get("/api/order/number/" + number))
+                .andExpect(jsonPath("$.promoCode").value("SAVE10"))
+                .andExpect(jsonPath("$.discount").value(360.0))
+                .andExpect(jsonPath("$.totalPrice").value(3240.0));
+    }
+
+    @Order(21)
+    @Test
+    void createOrder_withPromoCodeBelowMinimum_isRejectedAndNotSaved() throws Exception {
+        String token = customerToken();
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(promoOrder(1, "SAVE10"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Add 1,200 AMD more to use this code"));
+
+        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Order(22)
+    @Test
+    void createOrder_withExpiredOrUnknownPromoCode_isRejected() throws Exception {
+        String token = customerToken();
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(promoOrder(5, "OLD15"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("This code has expired"));
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(promoOrder(5, "NOPE99"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Code not found"));
+    }
+
+    @Order(23)
+    @Test
+    void createOrder_withoutPromoCode_hasNoDiscount() throws Exception {
+        String response = mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + customerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(promoOrder(2, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPrice").value(3600.0))
+                .andReturn().getResponse().getContentAsString();
+        String number = objectMapper.readTree(response).get("number").asText();
+        mockMvc.perform(get("/api/order/number/" + number))
+                .andExpect(jsonPath("$.promoCode").doesNotExist())
+                .andExpect(jsonPath("$.discount").doesNotExist());
+    }
 }

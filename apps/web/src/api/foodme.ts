@@ -16,6 +16,8 @@ import type {
   OrderDto,
   OrderListResponseDto,
   OrderReviewDto,
+  PromoQuoteRequest,
+  PromoQuoteResponse,
 } from "@/types";
 
 export const foodmeApi = {
@@ -32,6 +34,9 @@ export const foodmeApi = {
 
   getDeliveryPrice: (payload: DeliveryPriceRequest) =>
     apiClient.post<DeliveryPriceResponse>("/api/order/delivery-price", payload),
+
+  quotePromoCode: (payload: PromoQuoteRequest) =>
+    apiClient.post<PromoQuoteResponse>("/api/order/promo-code", payload),
 
   createOrder: (payload: OrderDto) =>
     apiClient.post<OrderCreateResponseDto>("/api/order", payload),

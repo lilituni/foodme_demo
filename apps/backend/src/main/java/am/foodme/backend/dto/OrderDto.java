@@ -29,6 +29,9 @@ public class OrderDto {
     private String rejectReason;
     private Double totalPrice;
     private Double deliveryPrice;
+    /** KAN-11: on create, the code the customer applied; on read, the code saved on the order. */
+    private String promoCode;
+    private Double discount;
     private AddressDto addressDto;
     private List<CreateOrderDishDto> createOrderDishes;
     private List<OrderDishDto> orderDishList;
@@ -54,6 +57,8 @@ public class OrderDto {
         dto.setRejectReason(entity.getRejectReason());
         dto.setTotalPrice(entity.getTotalPrice());
         dto.setDeliveryPrice(entity.getDeliveryPrice());
+        dto.setPromoCode(entity.getPromoCode());
+        dto.setDiscount(entity.getDiscount());
         dto.setAddressDto(AddressDto.mapEntityToDto(entity.getAddress()));
         if (entity.getOrderDishList() != null) {
             dto.setOrderDishList(entity.getOrderDishList().stream()

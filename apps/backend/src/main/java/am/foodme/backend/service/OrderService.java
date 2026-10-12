@@ -7,6 +7,8 @@ import am.foodme.backend.dto.DeliveryPriceResponseDto;
 import am.foodme.backend.dto.OrderCreateResponseDto;
 import am.foodme.backend.dto.OrderDto;
 import am.foodme.backend.dto.OrderListResponseDto;
+import am.foodme.backend.dto.PromoQuoteRequestDto;
+import am.foodme.backend.dto.PromoQuoteResponseDto;
 import am.foodme.backend.exceptionHandler.BadRequestException;
 import am.foodme.backend.exceptionHandler.NotFoundException;
 import am.foodme.backend.model.Address;
@@ -37,15 +39,26 @@ public class OrderService {
     private final DishRepository dishRepository;
     private final CustomerRepository customerRepository;
     private final MeterRegistry meterRegistry;
+    private final PromoCodeService promoCodeService;
 
     public OrderService(OrderRepository orderRepository, ChefRepository chefRepository,
                          DishRepository dishRepository, CustomerRepository customerRepository,
-                         MeterRegistry meterRegistry) {
+                         MeterRegistry meterRegistry, PromoCodeService promoCodeService) {
         this.orderRepository = orderRepository;
         this.chefRepository = chefRepository;
         this.dishRepository = dishRepository;
         this.customerRepository = customerRepository;
         this.meterRegistry = meterRegistry;
+        this.promoCodeService = promoCodeService;
+    }
+
+    /** KAN-11: price a promo code for the checkout page (same delivery rules as the order). */
+    public PromoQuoteResponseDto quotePromoCode(PromoQuoteRequestDto request) {
+        double subtotal = request.getSubtotal() == null ? 0.0 : request.getSubtotal();
+        String method = "TAKEAWAY".equals(request.getDeliveryMethod()) ? "TAKEAWAY" : "DELIVERY";
+        double deliveryPrice = calculateDeliveryPrice(
+                new DeliveryPriceRequestDto(request.getChefId(), subtotal, method)).getDeliveryPrice();
+        return promoCodeService.evaluate(request.getCode(), subtotal, deliveryPrice);
     }
 
     public DeliveryPriceResponseDto calculateDeliveryPrice(DeliveryPriceRequestDto request) {
@@ -149,7 +162,20 @@ public class OrderService {
             deliveryPrice = calculateDeliveryPrice(priceRequest).getDeliveryPrice();
         }
         order.setDeliveryPrice(deliveryPrice);
-        order.setTotalPrice(subtotal + deliveryPrice);
+
+        // KAN-11: re-check the code against the server-side prices, never the client's.
+        double discount = 0.0;
+        if (orderDto.getPromoCode() != null && !orderDto.getPromoCode().isBlank()) {
+            PromoQuoteResponseDto promo = promoCodeService.evaluate(orderDto.getPromoCode(), subtotal, deliveryPrice);
+            if (!promo.isApplies()) {
+                throw new BadRequestException(promo.getMessage());
+            }
+            discount = promo.getDiscount();
+            order.setPromoCode(promo.getCode());
+            order.setDiscount(discount);
+            meterRegistry.counter("foodme.orders.promo", "code", promo.getCode()).increment();
+        }
+        order.setTotalPrice(subtotal + deliveryPrice - discount);
 
         long seqValue = orderRepository.nextOrderNumberSequenceValue();
         order.setNumber("FM-" + (100000 + seqValue));
