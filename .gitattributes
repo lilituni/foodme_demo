@@ -1,0 +1,2 @@
+# Shell scripts must keep LF endings: bash fails on CRLF (e.g. the status line, hooks, gradlew in Docker).
+*.sh text eol=lf
