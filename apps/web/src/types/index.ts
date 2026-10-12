@@ -132,6 +132,8 @@ export interface OrderCreateResponseDto {
 
 export interface OrderDishDto {
   id: number;
+  /** The menu dish this line came from; null for legacy lines that can't be traced. */
+  dishId?: number | null;
   nameEn: string;
   nameHy: string;
   nameRu: string;

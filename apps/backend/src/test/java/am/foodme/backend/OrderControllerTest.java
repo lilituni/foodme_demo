@@ -1,5 +1,9 @@
 package am.foodme.backend;
 
+import am.foodme.backend.model.OrderDish;
+import am.foodme.backend.repository.ChefRepository;
+import am.foodme.backend.repository.CustomerRepository;
+import am.foodme.backend.repository.OrderRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -36,6 +40,15 @@ class OrderControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private ChefRepository chefRepository;
+
+    @Autowired
+    private CustomerRepository customerRepository;
 
     private final AtomicInteger customerSeq = new AtomicInteger();
 
@@ -244,5 +257,74 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isNotFound());
+    }
+
+    // KAN-10/KAN-15: order history carries the menu dish of every line and the
+    // order's chef, so "Order again" can rebuild the basket. Ordered after the
+    // FM-FLAKE-02 cases because placing an order consumes order_number_seq.
+    @Order(9)
+    @Test
+    void orderHistory_afterPlacingOrder_showsDishReferencePerLineAndChef() throws Exception {
+        String token = customerToken();
+        Map<String, Object> body = Map.of(
+                "chefId", 1,
+                "receiverName", "Ann",
+                "receiverPhoneNumber", "+37491234567",
+                "receiverEmail", "ann@example.com",
+                "paymentType", "CASH",
+                "deliveryMethod", "TAKEAWAY",
+                "createOrderDishes", List.of(
+                        Map.of("dishId", 2, "quantity", 1),
+                        Map.of("dishId", 1, "quantity", 3))
+        );
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.list[0].chefId").value(1))
+                .andExpect(jsonPath("$.list[0].orderDishList.length()").value(2))
+                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].dishId").value(2))
+                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].quantity").value(1))
+                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].dishId").value(1))
+                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].quantity").value(3));
+    }
+
+    // KAN-15: a legacy line whose dish can't be traced is still listed, just without the reference.
+    @Order(10)
+    @Test
+    void orderHistory_legacyLineWithoutDish_isShownWithoutReference() throws Exception {
+        String token = customerToken();
+        String email = objectMapper.readTree(mockMvc.perform(get("/api/customer/me")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString()).get("email").asText();
+
+        am.foodme.backend.model.Order order = new am.foodme.backend.model.Order();
+        order.setNumber("LG-" + UUID.randomUUID().toString().substring(0, 8));
+        order.setStatus("DELIVERED");
+        order.setChef(chefRepository.findById(1L).orElseThrow());
+        order.setCustomer(customerRepository.findByEmail(email).orElseThrow());
+        order.setReceiverName("Ann");
+        order.setPaymentType("CASH");
+        order.setDeliveryMethod("TAKEAWAY");
+        order.setTotalPrice(2000.0);
+        order.setDeliveryPrice(0.0);
+        order.setCreatedAt(java.time.LocalDateTime.now());
+        OrderDish line = new OrderDish();
+        line.setOrder(order);
+        line.setNameEn("Retired Dish");
+        line.setPrice(2000.0);
+        line.setQuantity(1);
+        order.setOrderDishList(List.of(line));
+        orderRepository.save(order);
+
+        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.list[0].orderDishList[0].nameEn").value("Retired Dish"))
+                .andExpect(jsonPath("$.list[0].orderDishList[0].quantity").value(1))
+                .andExpect(jsonPath("$.list[0].orderDishList[0].dishId").doesNotExist());
     }
 }

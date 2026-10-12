@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, ChefHat, Package, Truck, X } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
+import { OrderAgainButton } from "@/components/sections/order-again-button";
 import { StarRatingDisplay } from "@/components/sections/star-rating";
 import { formatAmd } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -204,6 +205,11 @@ export default function Tracking() {
               {formatAmd(data.totalPrice)}
             </span>
           </div>
+          {isAuthenticated && (
+            <div className="border-t border-zinc-100 px-5 py-3">
+              <OrderAgainButton order={data} />
+            </div>
+          )}
         </div>
       </div>
 
