@@ -20,6 +20,7 @@ import {
     TextField,
     Stack,
     Rating,
+    Alert,
 } from '@mui/material';
 import { OrderStatus, OrderStatusColors, OrderStatusTransitions } from '../../constants/OrderStatus.jsx';
 import { updateOrderStatus } from '../../api/order-api.js';
@@ -115,6 +116,12 @@ const OrderDetails = () => {
                         color={OrderStatusColors[record.status] ?? 'default'}
                     />
                 </Stack>
+
+                {record.status === OrderStatus.CANCELLED && (
+                    <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+                        Cancelled by customer
+                    </Alert>
+                )}
 
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6}>

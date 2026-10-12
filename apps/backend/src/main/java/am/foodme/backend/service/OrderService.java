@@ -168,6 +168,28 @@ public class OrderService {
         return OrderDto.mapEntityToDto(order);
     }
 
+    /**
+     * KAN-9: the customer who placed an order may cancel it while it is still NEW.
+     * Anyone else gets the same 404 as for a non-existent order, so order numbers
+     * can't be probed for ownership.
+     */
+    @Transactional
+    public OrderDto cancelOrder(String customerEmail, String number) {
+        String email = customerEmail == null ? "" : customerEmail.trim().toLowerCase();
+        Order order = orderRepository.findByNumber(number)
+                .filter(o -> o.getCustomer() != null && email.equals(o.getCustomer().getEmail()))
+                .orElseThrow(() -> new NotFoundException("Order " + number + " not found"));
+
+        // Conditional update: if the kitchen accepted it in the meantime, nothing changes.
+        if (orderRepository.transitionStatus(order.getId(), "NEW", "CANCELLED") == 0) {
+            throw new BadRequestException("Only new orders can be cancelled.");
+        }
+
+        meterRegistry.counter("foodme.orders.cancelled").increment();
+
+        return OrderDto.mapEntityToDto(orderRepository.findById(order.getId()).orElseThrow());
+    }
+
     @Transactional(readOnly = true)
     public OrderListResponseDto listForCustomer(String customerEmail, int page, int size) {
         Customer customer = customerRepository.findByEmail(customerEmail == null ? "" : customerEmail.trim().toLowerCase())

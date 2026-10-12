@@ -51,11 +51,21 @@ public class AdminOrderService {
     @Transactional
     public OrderDto updateStatus(Long id, String newStatus, String rejectReason) {
         Order order = findEntity(id);
-        Set<String> allowed = ALLOWED_TRANSITIONS.get(order.getStatus());
-        if (allowed == null || !allowed.contains(newStatus)) {
-            throw new BadRequestException("Cannot transition order from " + order.getStatus() + " to " + newStatus);
+        String currentStatus = order.getStatus();
+        // KAN-9: CANCELLED has no outgoing transitions; say so explicitly.
+        if ("CANCELLED".equals(currentStatus)) {
+            throw new BadRequestException("Order was cancelled by the customer; cancelled orders are final");
         }
-        order.setStatus(newStatus);
+        Set<String> allowed = ALLOWED_TRANSITIONS.get(currentStatus);
+        if (allowed == null || !allowed.contains(newStatus)) {
+            throw new BadRequestException("Cannot transition order from " + currentStatus + " to " + newStatus);
+        }
+        // Compare-and-set so a customer cancel that lands between the read above and
+        // this write isn't overwritten (the cancel path uses the same guard).
+        if (orderRepository.transitionStatus(id, currentStatus, newStatus) == 0) {
+            throw new BadRequestException("Order status changed in the meantime; reload and try again");
+        }
+        order = findEntity(id);
         if ("REJECTED".equals(newStatus)) {
             order.setRejectReason(rejectReason);
         }
