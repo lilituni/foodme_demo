@@ -61,7 +61,7 @@ copy its output. A made-up time breaks the audit trail in `gates.yaml`.
 | 01 | Test analysis (test basis review) | `requirements-gathering` | `spec.yaml`: ACs, out of scope, gap questions | answers to gap questions, then approve → `requirements` | ✅ |
 | 02 | Test planning | `test-planning` | `plan.md` | approve → `plan` | ✅ |
 | 03 + 04 | Test design + review | `test-case-design` (calls subagent `case-judge`) | `test_cases` in `spec.yaml`, `verdicts/04-*` | approve → `cases` | ✅ |
-| 05 | Test execution (manual) | `test-execution` | `execution.md`, per-case result + confidence | check every case the agent isn't sure about → `manual_check` | ⏳ |
+| 05 | Test execution (manual) | `test-execution` | `execution.md`, per-case result + confidence | check every case the agent isn't sure about → `manual_check` | ✅ |
 | 06 + 07 | Test implementation + review | `test-automation` (calls subagent `test-judge`) | Playwright / JUnit tests, `verdicts/07-*` | approve → `tests` | ⏳ |
 | 08 | Test execution (automated) | `run-regression`, scoped to this feature | `results.json` | - | ⏳ |
 | 09 | Defect triage | **bug-triage workflow** (`/bug-triage <T>`, separate) | `triage.json`, Jira bugs, known-bug markers | approve each finding → `triage` | ⏳ |
