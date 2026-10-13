@@ -116,6 +116,9 @@ After the last case: if any case is `unsure`, set `R/status` to
 and ask with **AskUserQuestion**, one question per unsure case (up to 4 per call,
 header = case id): `Confirmed match` / `Confirmed mismatch` / `Blocked` /
 `Can't check now (keep unsure)`. The human can add a note through "Other".
+Each question tells the human to **look for themselves** (URL, what to do,
+what to see) before answering. "Confirmed" means they checked it, not that
+they agree with the agent.
 
 For each answer add to that case's `execution` in `spec.yaml`:
 
@@ -128,9 +131,15 @@ For each answer add to that case's `execution` in `spec.yaml`:
 ```
 
 Then write the `manual_check` entry of `R/gates.yaml` (keep the others):
-`{ checked: N, by, at, note }`. If no case was unsure, write
-`{ checked: 0, by: "none needed", at: <date -u>, note: "all results sure" }`
+`{ executed_by: "Claude (agent), all N cases", checked: N, by, at, note }`.
+`by` is only the person who answered the unsure-case questions; the note
+names exactly which cases they confirmed. If no case was unsure, write
+`{ executed_by: "Claude (agent), all N cases", checked: 0, by: "none needed", at: <date -u>, note: "all results sure" }`
 without asking.
+
+In every summary, say who did what: **the agent executed the cases; the human
+only confirmed the listed unsure ones.** Never write "manual check by <human>"
+as if the human ran the tests.
 
 ## End
 
