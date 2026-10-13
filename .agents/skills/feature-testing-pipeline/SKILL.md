@@ -65,7 +65,7 @@ copy its output. A made-up time breaks the audit trail in `gates.yaml`.
 | 06 + 07 | Test implementation + review | `test-automation` (calls subagent `test-judge`) | Playwright / JUnit tests on the feature branch (one per case, dry-run vs 05), `verdicts/07-*` | approve (+ commit, push only if asked) → `tests` | ✅ |
 | 08 | Test execution (automated) | `run-regression <T>` (its "Feature run" section) | `results.json`, per-case `regression` in `spec.yaml` | - | ✅ |
 | 09 | Defect triage | **bug-triage workflow** (`/bug-triage <T>`, separate; calls subagent `triage-analyst`) | `triage.json`, Jira bugs, known-bug markers | decide each finding, then approve the actions → `triage` | ✅ |
-| 10 | Test completion | `test-reporting` | `report.md`, `report.html`, Qase run | approve → `report` | ⏳ |
+| 10 | Test completion | `test-reporting` | `report.md`, `report.html`, Qase run (project `FM`), Jira comment | approve (+ publish only if chosen) → `report` | ✅ |
 
 ISTQB's *test monitoring and control* runs across all steps: it is this skill's
 `status` file and `gates.yaml`, plus the stop rules below.
