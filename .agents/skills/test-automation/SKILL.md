@@ -66,7 +66,8 @@ same app (`apps/web/e2e/auth.ts`, `storefront-flows.spec.ts`) or test class
   app's API like `auth.ts` does; never the run's `test-account.yaml`, never a
   real account) and starts from an empty cart. No order between tests, no
   shared state; the web suite runs `fullyParallel`.
-- An order placed by a test has `STLC <T> <case-id> auto` in the note.
+- An order placed by a test uses the note the case gives (e.g. TC-13's
+  `STLC KAN-11 TC-13`); a case that gives no note gets `STLC <T> <case-id> auto`.
 - **Desktop + mobile:** the plan's main success case(s) (the first case of the
   main flow, e.g. TC-01) also run on a phone viewport:
   `test.describe("mobile", () => { test.use({ ...devices["Pixel 7"] }); … })`,
@@ -148,6 +149,6 @@ Ask with **AskUserQuestion**: `Approve tests` / `Request changes` / `Stop here`.
 
 ## End
 
-- `STATUS: DONE: N tests approved (A automated, M manual-only; judge 07-NN <verdict>); next /run-regression scoped to <T> (step 08)`
+- `STATUS: DONE: N tests approved (A automated, M manual-only; judge 07-NN <verdict>); next /run-regression <T> (step 08)`
 - `STATUS: NEEDS_HUMAN: <what>`
 - `STATUS: BLOCKED: <reason>`
