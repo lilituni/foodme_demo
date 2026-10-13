@@ -64,7 +64,7 @@ copy its output. A made-up time breaks the audit trail in `gates.yaml`.
 | 05 | Test execution (manual) | `test-execution` | `execution.md`, per-case result + confidence | check every case the agent isn't sure about → `manual_check` | ✅ |
 | 06 + 07 | Test implementation + review | `test-automation` (calls subagent `test-judge`) | Playwright / JUnit tests on the feature branch (one per case, dry-run vs 05), `verdicts/07-*` | approve (+ commit, push only if asked) → `tests` | ✅ |
 | 08 | Test execution (automated) | `run-regression <T>` (its "Feature run" section) | `results.json`, per-case `regression` in `spec.yaml` | - | ✅ |
-| 09 | Defect triage | **bug-triage workflow** (`/bug-triage <T>`, separate) | `triage.json`, Jira bugs, known-bug markers | approve each finding → `triage` | ⏳ |
+| 09 | Defect triage | **bug-triage workflow** (`/bug-triage <T>`, separate; calls subagent `triage-analyst`) | `triage.json`, Jira bugs, known-bug markers | decide each finding, then approve the actions → `triage` | ✅ |
 | 10 | Test completion | `test-reporting` | `report.md`, `report.html`, Qase run | approve → `report` | ⏳ |
 
 ISTQB's *test monitoring and control* runs across all steps: it is this skill's
@@ -83,7 +83,7 @@ reads. No bug is filed in Jira before a human approves it in step 09.
    - 03 + 04 done: `test_cases` is not empty and `cases.approved: true`.
    - 05 done: every case has `execution.result`, every `unsure` case has a `human_check`, and `gates.yaml` has `manual_check`.
    - 06 + 07 done: every automatable case has `automation`, and `tests.approved: true`.
-   - 08 done: `results.json` exists and its `commit` is the feature worktree's HEAD.
+   - 08 done: `results.json` exists and its `tests_commit` is `gates.yaml`'s `tests.commit`.
    - 09 done: `triage.json` exists and `triage.approved: true`.
    - 10 done: `report.md` exists and `report.approved: true`.
 2. Print one line: `Run <T>: starting at step NN (done: 01, 02, …)`.

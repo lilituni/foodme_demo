@@ -227,9 +227,10 @@ There's no human gate in this step.
 `R/gates.yaml` has `tests.approved: true`. Otherwise:
 `STATUS: BLOCKED: step 06 is not approved; run /test-automation <T>`.
 
-Resume: if `R/results.json` exists and its `commit` is `W`'s HEAD, the step is
-done - print its summary and end with `DONE`. A different commit means the
-tests changed: run again (the old file is overwritten).
+Resume: if `R/results.json` exists and its `tests_commit` is `gates.yaml`'s
+`tests.commit`, the step is done - print its summary and end with `DONE`. A
+different one means step 06 changed the tests: run again (the old file is
+overwritten). A step 09 marker commit on top doesn't count as a change.
 
 ### 1. Entry check
 
@@ -317,7 +318,8 @@ in `other`:
   "run": "KAN-11",
   "step": "08",
   "branch": "feature/KAN-11-promo-codes",
-  "commit": "e740a39",
+  "commit": "<W HEAD when run>",
+  "tests_commit": "<gates.yaml tests.commit, e.g. e740a39>",
   "sut": { "api": "http://localhost:8081", "health": "UP", "entry_check": "pass" },
   "started": "<date -u>",
   "finished": "<date -u>",
