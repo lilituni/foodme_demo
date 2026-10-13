@@ -149,6 +149,7 @@ test.describe("KAN-11 promo codes - approved cases", () => {
   });
 
   test("KAN-11-TC-04 TREAT15 on 8,050 AMD: a fractional discount is rounded down", async ({ page }) => {
+    test.fail(true, "KAN-19: TREAT15 discount on 8,050 AMD shown as 1,208 AMD (rounded up), Q-2 says round down; discount and total don't add up");
     await openChefAndAdd(page, [["Mushroom soup", 1], ["Borscht", 2], ["Quiche with vegetables", 2]]);
     await goToCheckout(page, "Takeaway");
     await applyCode(page, "TREAT15");
@@ -178,6 +179,7 @@ test.describe("KAN-11 promo codes - approved cases", () => {
   });
 
   test("KAN-11-TC-07 Near-matches of SAVE10 (lower case, surrounding spaces) are not accepted", async ({ page }) => {
+    test.fail(true, "KAN-20: promo codes accepted in lower case and with surrounding spaces (Q-3 says exact match only)");
     await openChefAndAdd(page, B3050);
     await goToCheckout(page, "Takeaway");
 
@@ -199,6 +201,7 @@ test.describe("KAN-11 promo codes - approved cases", () => {
   });
 
   test("KAN-11-TC-09 A rejected second code leaves the first code applied", async ({ page }) => {
+    test.fail(true, "KAN-21: applying an unknown second promo code removes the already-applied code (Q-5 says it should stay)");
     await openChefAndAdd(page, B3050);
     await goToCheckout(page, "Takeaway");
     await applyCode(page, "SAVE10");
