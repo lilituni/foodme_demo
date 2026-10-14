@@ -1,6 +1,7 @@
 package am.foodme.backend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -70,13 +71,19 @@ class PromoCodeControllerTest {
                 .andExpect(jsonPath("$.total").value(4300.0));
     }
 
+    // KAN-11 Q-3 (answered by the product owner): exact match only, so anything but the
+    // code as written is "Code not found". Fails until KAN-20 (the service trims and
+    // upper-cases the code) is fixed; matches e2e KAN-11-TC-07.
+    @Tag("known-bug") // KAN-20, still fails by design; excluded from mutation testing only
     @Test
-    void code_isCaseInsensitiveAndTrimmed() throws Exception {
+    void code_isExactMatchOnly() throws Exception {
         quote("  treat15 ", 10000, "TAKEAWAY")
-                .andExpect(jsonPath("$.applies").value(true))
-                .andExpect(jsonPath("$.code").value("TREAT15"))
-                .andExpect(jsonPath("$.discount").value(1500.0))
-                .andExpect(jsonPath("$.total").value(8500.0));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applies").value(false))
+                .andExpect(jsonPath("$.reason").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Code not found"))
+                .andExpect(jsonPath("$.discount").value(0.0))
+                .andExpect(jsonPath("$.total").value(10000.0));
     }
 
     // Boundary values around each code's minimum order amount (AC-3).
