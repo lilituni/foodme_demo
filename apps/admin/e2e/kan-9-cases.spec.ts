@@ -55,11 +55,28 @@ async function cancelAsCustomer(request: APIRequestContext, token: string, numbe
   expect(res.ok()).toBeTruthy(); // sync: customer cancelled
 }
 
-/** The admin's Reject (decline), as the admin panel sends it. */
-async function rejectAsAdmin(request: APIRequestContext, number: string) {
+async function adminLogin(request: APIRequestContext) {
   const login = await request.post(`${API}/admin/auth/login`, { data: { username: "admin", password: "admin123" } });
   expect(login.ok()).toBeTruthy(); // sync: admin signed in
-  const { token } = await login.json();
+  return (await login.json()).token as string;
+}
+
+type OrderSnapshot = Map<number, { number: string; status: string; totalPrice: number; key: string }>;
+
+/** The newest 100 orders, as the dashboard requests them (id → status and total). */
+async function recentOrders(request: APIRequestContext, token: string): Promise<OrderSnapshot> {
+  const res = await request.get(`${API}/admin/order?page=0&size=100`, { headers: { Authorization: `Bearer ${token}` } });
+  expect(res.ok()).toBeTruthy(); // sync: orders read
+  const list: { id: number; number: string; status: string; totalPrice: number }[] = (await res.json()).list;
+  return new Map(list.map((o) => [o.id, { ...o, key: `${o.status}:${o.totalPrice}` }]));
+}
+
+const same = (a: OrderSnapshot, b: OrderSnapshot) =>
+  a.size === b.size && [...a].every(([id, o]) => b.get(id)?.key === o.key);
+
+/** The admin's Reject (decline), as the admin panel sends it. */
+async function rejectAsAdmin(request: APIRequestContext, number: string) {
+  const token = await adminLogin(request);
   const order = await (await request.get(`${API}/api/order/number/${number}`)).json();
   const res = await request.patch(`${API}/admin/order/${order.id}/status`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -134,23 +151,52 @@ test.describe("KAN-9 cancel order - approved admin cases", () => {
   });
 
   test("KAN-9-TC-12 Dashboard revenue excludes a cancelled and a declined order", async ({ page, request }) => {
+    // "Recent revenue" sums the newest 100 orders of the whole shop, so other test
+    // files placing orders on another worker move it too (step 09 finding F-02).
+    // The case's steps run as written; a measurement during which any other order
+    // appeared or changed is thrown away and the steps are run again.
+    test.setTimeout(240_000);
+    const adminToken = await adminLogin(request);
     await loginAsAdmin(page);
-    // Step 1: R0.
-    await page.goto("/#/");
-    const r0 = await revenueFigure(page);
 
-    // Step 2: order A (O-rev), cancelled by customer A.
-    const customer = await registerCustomer(request);
-    const orderA = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
-    await cancelAsCustomer(request, customer, orderA);
-    // Step 3: order B (O-rev), declined in the admin panel.
-    const orderB = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
-    await rejectAsAdmin(request, orderB);
+    let measured: { r0: number; after: number; dropped: number } | null = null;
+    for (let attempt = 1; attempt <= 5 && !measured; attempt++) {
+      // Step 1: R0, with the dashboard's window of orders unchanged while it loads.
+      const s1 = await recentOrders(request, adminToken);
+      await page.goto("/#/");
+      await page.reload(); // sync: the dashboard fetches the orders again
+      const r0 = await revenueFigure(page);
+      const s2 = await recentOrders(request, adminToken);
 
-    // Step 4: reload the dashboard.
-    await page.reload();
-    const after = await revenueFigure(page);
-    expect(after).toBe(r0); // expected[1]
-    expect([r0 + 3050, r0 + 6100]).not.toContain(after); // expected[2]
+      // Step 2: order A (O-rev), cancelled by customer A.
+      const customer = await registerCustomer(request);
+      const orderA = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
+      await cancelAsCustomer(request, customer, orderA);
+      // Step 3: order B (O-rev), declined in the admin panel.
+      const orderB = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
+      await rejectAsAdmin(request, orderB);
+
+      // Step 4: reload the dashboard.
+      const s3 = await recentOrders(request, adminToken);
+      await page.reload();
+      const after = await revenueFigure(page);
+      const s4 = await recentOrders(request, adminToken);
+
+      const others = new Map([...s3].filter(([, o]) => o.number !== orderA && o.number !== orderB));
+      const quiet = same(s1, s2) && same(s3, s4) && [...others].every(([id, o]) => s2.get(id)?.key === o.key);
+      if (!quiet) continue; // another worker placed or changed an order meanwhile
+
+      // Orders A and B push the oldest orders out of the 100-order window; their
+      // share of R0 leaves the figure for reasons that have nothing to do with A and B.
+      const dropped = [...s2]
+        .filter(([id, o]) => !others.has(id) && !["CANCELLED", "REJECTED"].includes(o.status))
+        .reduce((sum, [, o]) => sum + o.totalPrice, 0);
+      measured = { r0, after, dropped };
+    }
+
+    expect(measured, "a run of the steps with no other order activity").not.toBeNull(); // sync: isolated run
+    const { r0, after, dropped } = measured!;
+    expect(after + dropped).toBe(r0); // expected[1]
+    expect([r0 + 3050, r0 + 6100]).not.toContain(after + dropped); // expected[2]
   });
 });
