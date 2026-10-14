@@ -1,20 +1,23 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, ShoppingBag } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { AuthPanel } from "@/components/sections/auth-panel";
 import { CheckoutSummary } from "@/components/sections/checkout-summary";
 import { CheckoutPriceSummary } from "@/components/sections/checkout-price-summary";
+import { PromoCodeField } from "@/components/sections/promo-code-field";
+import { ApiRequestError } from "@/api/client";
 import { OrderDeliveryForm } from "@/components/sections/order-delivery-form";
 import { Button } from "@/components/ui/button";
 import { useCart, clearCart } from "@/hooks/useCart";
 import { useAuth } from "@/providers/auth-provider";
 import type { CheckoutFormValues } from "@/schemas/checkout-schema";
-import type { OrderDto } from "@/types";
+import type { OrderDto, PromoQuoteResponse } from "@/types";
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { items, subtotal } = useCart();
   const { isAuthenticated, customer, logout } = useAuth();
   const chefId = items[0]?.chefId;
@@ -37,6 +40,69 @@ export default function Checkout() {
 
   const deliveryPrice = deliveryPriceQuery.data?.deliveryPrice ?? 0;
   const freeDeliveryFrom = deliveryPriceQuery.data?.freeDeliveryFrom ?? 0;
+
+  // KAN-11: one code per order. The server prices it, and re-prices it whenever the
+  // cart or delivery method changes. Lives only in this page's state - never
+  // persisted across sessions.
+  const [promoCode, setPromoCode] = useState<string | null>(null);
+  const promoQuery = useQuery({
+    queryKey: ["promo-code", promoCode, chefId, subtotal, deliveryMethod],
+    queryFn: () =>
+      foodmeApi.quotePromoCode({
+        code: promoCode as string,
+        chefId: chefId as number,
+        subtotal,
+        deliveryMethod,
+      }),
+    enabled: promoCode !== null && chefId !== undefined && subtotal > 0,
+    // While the same code re-prices (cart or delivery method changed), keep its last
+    // quote - otherwise "Place order" pressed mid-refetch would drop the code. Never
+    // carry a quote over to a different code. The server re-checks on placement.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === promoCode ? previous : undefined,
+  });
+  const appliedPromo = promoCode !== null && promoQuery.data?.applies ? promoQuery.data : null;
+
+  // AC-6 / Q-5: while a code is applied, a second code is quoted first and only
+  // replaces it when it applies; a rejected one shows its error and the first code
+  // stays applied (KAN-21). The rejection shows only for the cart it was quoted on.
+  const [rejectedAttempt, setRejectedAttempt] = useState<{
+    quote: PromoQuoteResponse;
+    subtotal: number;
+    deliveryMethod: "DELIVERY" | "TAKEAWAY";
+  } | null>(null);
+  const tryPromoCode = useMutation({
+    mutationFn: (code: string) =>
+      foodmeApi.quotePromoCode({ code, chefId: chefId as number, subtotal, deliveryMethod }),
+    onSuccess: (quote, code) => {
+      if (quote.applies) {
+        queryClient.setQueryData(["promo-code", code, chefId, subtotal, deliveryMethod], quote);
+        setPromoCode(code);
+      } else {
+        setRejectedAttempt({ quote, subtotal, deliveryMethod });
+      }
+    },
+  });
+  const attemptRejection =
+    rejectedAttempt?.subtotal === subtotal && rejectedAttempt.deliveryMethod === deliveryMethod
+      ? rejectedAttempt.quote
+      : undefined;
+
+  const applyPromoCode = (code: string) => {
+    setRejectedAttempt(null);
+    tryPromoCode.reset();
+    if (appliedPromo !== null && chefId !== undefined) {
+      tryPromoCode.mutate(code);
+    } else {
+      setPromoCode(code);
+    }
+  };
+
+  const removePromoCode = () => {
+    setRejectedAttempt(null);
+    tryPromoCode.reset();
+    setPromoCode(null);
+  };
 
   const handleSubmit = async (values: CheckoutFormValues) => {
     if (chefId === undefined) return;
@@ -71,14 +137,20 @@ export default function Checkout() {
         quantity: item.quantity,
         additions: item.additions?.map((a) => ({ additionId: a.id })),
       })),
+      promoCode: appliedPromo?.code ?? null,
     };
 
     try {
       const order = await foodmeApi.createOrder(payload);
       await clearCart();
       navigate(`/orders/success?number=${order.number}`);
-    } catch {
-      setSubmitError("We could not place your order. Please try again.");
+    } catch (error) {
+      // A 400 carries a reason worth showing (e.g. the promo code stopped applying).
+      setSubmitError(
+        error instanceof ApiRequestError && error.status === 400 && error.message
+          ? error.message
+          : "We could not place your order. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -160,11 +232,20 @@ export default function Checkout() {
           <div className="bezel-outer shadow-diffuse">
             <div className="bezel-inner overflow-hidden">
               <CheckoutSummary items={items} embedded />
+              <PromoCodeField
+                quote={promoCode !== null ? promoQuery.data : undefined}
+                rejectedAttempt={attemptRejection}
+                isChecking={(promoCode !== null && promoQuery.isFetching) || tryPromoCode.isPending}
+                isError={(promoCode !== null && promoQuery.isError) || tryPromoCode.isError}
+                onApply={applyPromoCode}
+                onRemove={removePromoCode}
+              />
               <CheckoutPriceSummary
                 embedded
                 subtotal={subtotal}
                 deliveryPrice={deliveryMethod === "TAKEAWAY" ? 0 : deliveryPrice}
                 freeDeliveryFrom={freeDeliveryFrom}
+                promo={appliedPromo ? { code: appliedPromo.code, discount: appliedPromo.discount } : null}
                 isLoading={deliveryMethod === "DELIVERY" && deliveryPriceQuery.isLoading}
                 isError={deliveryMethod === "DELIVERY" && deliveryPriceQuery.isError}
               />
