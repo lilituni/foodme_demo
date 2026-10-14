@@ -1,0 +1,156 @@
+import { test, expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+
+// KAN-9 cancel order: one test per approved admin-panel test case (functional-
+// testing workflow, step 06). The cases in runs/KAN-9/spec.yaml are the spec;
+// every assertion checks the case's expected value (`// expected[n]`).
+// Lines marked `// sync:` only wait for the app to settle and check no case fact.
+// Customer orders are placed and cancelled through the customer API (the
+// storefront is a different app); admin actions go through the admin UI or API.
+
+const API = process.env.VITE_API_BASE_URL || "http://localhost:8081";
+const CHEF = 17; // Verona
+const MUSHROOM_SOUP = 132; // 1,950 AMD
+const QUICHE = 115; // 1,100 AMD
+
+async function loginAsAdmin(page: Page) {
+  await page.goto("/#/login");
+  await expect(page.getByRole("heading", { name: "FoodMe Admin" })).toBeVisible();
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill("admin123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("menuitem", { name: "Orders" })).toBeVisible({ timeout: 15000 });
+}
+
+async function registerCustomer(request: APIRequestContext) {
+  const email = `stlc-kan9-a-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const res = await request.post(`${API}/api/auth/register`, {
+    data: { fullName: "STLC Tester", email, phoneNumber: "+37491000000", password: "secret123" },
+  });
+  expect(res.ok()).toBeTruthy(); // sync: account created
+  return (await res.json()).token as string;
+}
+
+/** Places a Takeaway, cash order for the customer and returns its number. */
+async function placeOrder(request: APIRequestContext, token: string, caseId: string, dishes: number[]) {
+  const res = await request.post(`${API}/api/order`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      chefId: CHEF,
+      receiverName: "STLC Tester",
+      receiverPhoneNumber: "+37491000000",
+      paymentType: "CASH",
+      deliveryMethod: "TAKEAWAY",
+      note: `STLC KAN-9 ${caseId} auto`,
+      createOrderDishes: dishes.map((dishId) => ({ dishId, quantity: 1 })),
+    },
+  });
+  expect(res.ok()).toBeTruthy(); // sync: order placed
+  return (await res.json()).number as string;
+}
+
+async function cancelAsCustomer(request: APIRequestContext, token: string, number: string) {
+  const res = await request.post(`${API}/api/customer/orders/${number}/cancel`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(res.ok()).toBeTruthy(); // sync: customer cancelled
+}
+
+/** The admin's Reject (decline), as the admin panel sends it. */
+async function rejectAsAdmin(request: APIRequestContext, number: string) {
+  const login = await request.post(`${API}/admin/auth/login`, { data: { username: "admin", password: "admin123" } });
+  expect(login.ok()).toBeTruthy(); // sync: admin signed in
+  const { token } = await login.json();
+  const order = await (await request.get(`${API}/api/order/number/${number}`)).json();
+  const res = await request.patch(`${API}/admin/order/${order.id}/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { status: "REJECTED", rejectReason: `STLC KAN-9 declined` },
+  });
+  expect(res.ok()).toBeTruthy(); // sync: declined
+}
+
+const row = (page: Page, number: string) => page.getByRole("row").filter({ hasText: number });
+const statusChip = (scope: Locator) => scope.locator(".MuiChip-root");
+const background = (chip: Locator) => chip.evaluate((el) => getComputedStyle(el).backgroundColor);
+// The admin panel prints every status as its upper-case code; the human accepted
+// "CANCELLED" as the "Cancelled" label in step 05.
+const CANCELLED = /^cancelled$/i;
+
+/** "AMD 12,345" → 12345, once the card has finished loading. */
+async function revenueFigure(page: Page) {
+  const value = page.locator(".MuiCard-root").filter({ hasText: "Recent revenue" }).locator("h5");
+  await expect(value).toHaveText(/AMD/); // sync: figure loaded
+  return Number((await value.innerText()).replace(/\D/g, ""));
+}
+
+test.describe("KAN-9 cancel order - approved admin cases", () => {
+  test("KAN-9-TC-10 Admin panel: Cancelled label, colour, filter, note, no actions; no Cancel action for admins", async ({ page, request }) => {
+    const customer = await registerCustomer(request);
+    const fmC = await placeOrder(request, customer, "TC-10", [MUSHROOM_SOUP]);
+    await cancelAsCustomer(request, customer, fmC);
+    const fmR = await placeOrder(request, customer, "TC-10", [MUSHROOM_SOUP]);
+    const declined = await placeOrder(request, customer, "TC-10", [MUSHROOM_SOUP]);
+    await rejectAsAdmin(request, declined); // precondition: a Declined order exists
+
+    await loginAsAdmin(page);
+    // Step 1: the order list.
+    await page.goto("/#/orders");
+    const cancelledChip = statusChip(row(page, fmC));
+    await expect(cancelledChip).toHaveText(CANCELLED); // expected[1]
+
+    await expect(statusChip(row(page, declined))).toHaveText(/^rejected$/i); // sync: Declined row shown
+    await expect(statusChip(row(page, fmR))).toHaveText(/^new$/i); // sync: Received row shown
+    const cancelledColour = await background(cancelledChip);
+    const others = page.locator(".MuiChip-root").filter({ hasNotText: CANCELLED });
+    const otherColours = new Map<string, string>();
+    for (const chip of await others.all()) otherColours.set(await chip.innerText(), await background(chip));
+    expect(otherColours.get("REJECTED"), "Declined chip").not.toBe(cancelledColour); // expected[2] vs Declined
+    for (const [status, colour] of otherColours) {
+      expect(colour, `${status} chip`).not.toBe(cancelledColour); // expected[2] vs every other status
+    }
+
+    // Step 2: filter to Cancelled only.
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "CANCELLED" }).click();
+    await expect(page).toHaveURL(/CANCELLED/); // sync: filter applied
+    await expect(row(page, fmC)).toBeVisible(); // expected[3] FM-c listed
+    const chips = page.locator("tbody .MuiChip-root");
+    await expect(chips.first()).toBeVisible(); // sync: rows rendered
+    for (const chip of await chips.all()) await expect(chip).toHaveText(CANCELLED); // expected[3] no other status
+
+    // Step 3: FM-c's details.
+    await row(page, fmC).click();
+    const detailsHeading = page.getByRole("heading", { level: 5, name: `Order ${fmC}`, exact: true });
+    await expect(detailsHeading).toBeVisible(); // sync: details open
+    await expect(statusChip(detailsHeading.locator(".."))).toHaveText(CANCELLED); // expected[4] label
+    await expect(page.getByText("Cancelled by customer", { exact: true })).toBeVisible(); // expected[4] note
+    await expect(page.getByRole("button", { name: /accept|deliver|reject|mark as/i })).toHaveCount(0); // expected[5]
+
+    // Step 4: FM-r's details.
+    await page.goto("/#/orders?filter=%7B%7D"); // the list remembers the Cancelled filter; clear it
+    await row(page, fmR).click();
+    await expect(page.getByRole("heading", { level: 5, name: `Order ${fmR}`, exact: true })).toBeVisible(); // sync: details open
+    await expect(page.getByRole("button", { name: "Mark as ACCEPTED" })).toBeVisible(); // sync: actions rendered
+    await expect(page.getByRole("button", { name: /cancel/i })).toHaveCount(0); // expected[6]
+  });
+
+  test("KAN-9-TC-12 Dashboard revenue excludes a cancelled and a declined order", async ({ page, request }) => {
+    await loginAsAdmin(page);
+    // Step 1: R0.
+    await page.goto("/#/");
+    const r0 = await revenueFigure(page);
+
+    // Step 2: order A (O-rev), cancelled by customer A.
+    const customer = await registerCustomer(request);
+    const orderA = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
+    await cancelAsCustomer(request, customer, orderA);
+    // Step 3: order B (O-rev), declined in the admin panel.
+    const orderB = await placeOrder(request, customer, "TC-12", [MUSHROOM_SOUP, QUICHE]);
+    await rejectAsAdmin(request, orderB);
+
+    // Step 4: reload the dashboard.
+    await page.reload();
+    const after = await revenueFigure(page);
+    expect(after).toBe(r0); // expected[1]
+    expect([r0 + 3050, r0 + 6100]).not.toContain(after); // expected[2]
+  });
+});
