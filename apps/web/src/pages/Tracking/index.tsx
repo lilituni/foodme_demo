@@ -56,6 +56,13 @@ export default function Tracking() {
     enabled: !!number,
   });
 
+  // Only the order's owner may cancel it, so check it is among the signed-in customer's orders.
+  const { data: myOrders } = useQuery({
+    queryKey: ["my-orders", "tracking"],
+    queryFn: () => foodmeApi.getMyOrders(0, 100),
+    enabled: isAuthenticated,
+  });
+
   if (isLoading) {
     return (
       <div
@@ -97,7 +104,8 @@ export default function Tracking() {
   const rejected = data.status === "REJECTED";
   // A cancelled order never shows the progress bar - it isn't "in progress".
   const cancelled = data.status === "CANCELLED";
-  const canCancel = isAuthenticated && data.status === "NEW";
+  const isOwnOrder = !!myOrders?.list.some((o) => o.number === data.number);
+  const canCancel = isAuthenticated && isOwnOrder && data.status === "NEW";
 
   return (
     <div className="tp_wrap mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
