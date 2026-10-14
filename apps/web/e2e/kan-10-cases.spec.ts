@@ -170,6 +170,7 @@ const mobile375 = { ...pixel7, viewport: { width: 375, height: 812 } };
 
 test.describe("KAN-10 Order again - approved cases", () => {
   test("KAN-10-TC-02 Order tracking page: Order again only for the order's own signed-in customer", async ({ page, request }) => {
+    test.fail(true, "KAN-25: KAN-10: \"Order again\" shown on another customer's order tracking page (Q-5 says own orders only)");
     const a = await registerCustomer(request);
     const b = await registerCustomer(request);
     const number = await placeOrder(request, a, "STLC KAN-10 KAN-10-TC-02 auto", O1);
@@ -279,6 +280,7 @@ test.describe("KAN-10 Order again - approved cases", () => {
   });
 
   test("KAN-10-TC-10 Basket has the same chef's food: replaced without asking", async ({ page, request }) => {
+    test.fail(true, "KAN-26: KAN-10: Order again adds the old order to a same-chef basket instead of replacing it (Q-2)");
     const customer = await registerCustomer(request);
     await placeOrder(request, customer, "STLC KAN-10 KAN-10-TC-10 auto", O1);
     await setSignedIn(page, customer);
