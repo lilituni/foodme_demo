@@ -15,6 +15,14 @@ const OrderStatusColors = {
     [OrderStatus.CANCELLED]: 'default',
 };
 
+// Display labels. KAN-9 AC-3: a cancelled order is labelled "Cancelled" everywhere;
+// the other statuses keep showing their code.
+const OrderStatusLabels = {
+    [OrderStatus.CANCELLED]: 'Cancelled',
+};
+
+const orderStatusLabel = (status) => OrderStatusLabels[status] ?? status;
+
 // Statuses whose totals never count as revenue.
 const NonRevenueStatuses = [OrderStatus.REJECTED, OrderStatus.CANCELLED];
 
@@ -27,4 +35,4 @@ const OrderStatusTransitions = {
     [OrderStatus.CANCELLED]: [],
 };
 
-export { OrderStatus, OrderStatusColors, OrderStatusTransitions, NonRevenueStatuses };
+export { OrderStatus, OrderStatusColors, OrderStatusTransitions, NonRevenueStatuses, orderStatusLabel };

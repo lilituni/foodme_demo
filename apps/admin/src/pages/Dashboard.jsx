@@ -19,7 +19,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import LocalDiningIcon from '@mui/icons-material/LocalDining';
-import { NonRevenueStatuses, OrderStatus, OrderStatusColors } from '../constants/OrderStatus.jsx';
+import { NonRevenueStatuses, OrderStatus, OrderStatusColors, orderStatusLabel } from '../constants/OrderStatus.jsx';
 
 const currency = (value) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AMD', maximumFractionDigits: 0 }).format(
@@ -182,7 +182,7 @@ const Dashboard = () => {
                                                 <TableCell align="right">{currency(order.totalPrice)}</TableCell>
                                                 <TableCell>
                                                     <Chip
-                                                        label={order.status}
+                                                        label={orderStatusLabel(order.status)}
                                                         size="small"
                                                         color={OrderStatusColors[order.status] ?? 'default'}
                                                     />
@@ -210,7 +210,7 @@ const Dashboard = () => {
                                         justifyContent="space-between"
                                     >
                                         <Chip
-                                            label={status}
+                                            label={orderStatusLabel(status)}
                                             size="small"
                                             color={OrderStatusColors[status] ?? 'default'}
                                         />

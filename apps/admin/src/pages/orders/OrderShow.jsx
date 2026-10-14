@@ -22,7 +22,7 @@ import {
     Rating,
     Alert,
 } from '@mui/material';
-import { OrderStatus, OrderStatusColors, OrderStatusTransitions } from '../../constants/OrderStatus.jsx';
+import { OrderStatus, OrderStatusColors, OrderStatusTransitions, orderStatusLabel } from '../../constants/OrderStatus.jsx';
 import { updateOrderStatus } from '../../api/order-api.js';
 import BackButton from '../../layout/BackButton.jsx';
 
@@ -112,7 +112,7 @@ const OrderDetails = () => {
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
                     <Typography variant="h5">Order {record.number}</Typography>
                     <Chip
-                        label={record.status}
+                        label={orderStatusLabel(record.status)}
                         color={OrderStatusColors[record.status] ?? 'default'}
                     />
                 </Stack>

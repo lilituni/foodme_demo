@@ -51,6 +51,7 @@ class CancelOrderCasesTest {
 
     private static final long MUSHROOM_SOUP = 132L;
     private static final String ONLY_NEW = "Only new orders can be cancelled.";
+    private static final String CANCELLED_FINAL = "Order was cancelled by the customer; cancelled orders are final";
 
     @Autowired
     private MockMvc mockMvc;
@@ -215,7 +216,7 @@ class CancelOrderCasesTest {
         assertThat(statusOnMyOrders(customerA, number)).isEqualTo("CANCELLED"); // expected[1] ... and the order is Cancelled
 
         cancel(customerA, number)
-                .andExpect(status().is4xxClientError()) // expected[2] refused
+                .andExpect(status().isBadRequest()) // expected[2] refused
                 .andExpect(jsonPath("$.message").value(ONLY_NEW)); // expected[2] its response says the reason
         assertThat(statusOnMyOrders(customerA, number)).isEqualTo("CANCELLED"); // expected[3]
     }
@@ -235,12 +236,12 @@ class CancelOrderCasesTest {
                 "{\"status\":\"DELIVERED\",\"rejectReason\":null}",
                 "{\"status\":\"REJECTED\",\"rejectReason\":\"STLC KAN-9 TC-11 auto\"}");
         for (String body : bodies) {
-            int code = mockMvc.perform(patch("/admin/order/" + idC + "/status")
+            mockMvc.perform(patch("/admin/order/" + idC + "/status")
                             .header("Authorization", "Bearer " + admin)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
-                    .andReturn().getResponse().getStatus();
-            assertThat(code / 100).as("status %s for %s", code, body).isNotEqualTo(2); // expected[1]
+                    .andExpect(status().isBadRequest()) // expected[1] refused
+                    .andExpect(jsonPath("$.message").value(CANCELLED_FINAL)); // expected[1] ... with the reason
         }
 
         // expected[2]: FM-c is still Cancelled, in the admin panel and on customer A's My Orders
