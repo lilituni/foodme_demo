@@ -3,12 +3,15 @@ package am.foodme.backend;
 import am.foodme.backend.repository.OrderRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -21,6 +24,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,7 +36,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Covers OrderService / AdminOrderService paths the feature tests don't reach:
  * delivery-price rules, not-found lookups, the delivery address on an order, and
- * cancelling an order the kitchen already finished (DELIVERED) or declined (REJECTED).
+ * cancelling an order the kitchen already finished (DELIVERED) or declined (REJECTED), and the
+ * admin status update's transition table and compare-and-set race branch (OrderRepository is a
+ * spy so a test can make transitionStatus report that the row changed underneath it).
  *
  * Chef 1 (data.sql): delivery_price 700.0, free_delivery_from 8000.0; dish 1 costs 1800.0.
  * The exact-threshold case (subtotal == 8000) is FM-BUG-03 and stays in OrderControllerTest.
@@ -54,8 +62,11 @@ class OrderServiceCoverageTest {
     @Autowired
     private JdbcTemplate jdbc;
 
-    @Autowired
+    @SpyBean
     private OrderRepository orderRepository;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     private final List<String> placedNumbers = new ArrayList<>();
     private long sequenceBefore;
@@ -136,6 +147,20 @@ class OrderServiceCoverageTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"" + newStatus + "\",\"rejectReason\":null}"))
                 .andExpect(status().isOk());
+    }
+
+    private void adminSetStatusRefused(String admin, long id, String body, String message) throws Exception {
+        mockMvc.perform(patch("/admin/order/" + id + "/status")
+                        .header("Authorization", "Bearer " + admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(message));
+    }
+
+    private double cancelledCount() {
+        Counter counter = meterRegistry.find("foodme.orders.cancelled").counter();
+        return counter == null ? 0.0 : counter.count();
     }
 
     private void deliveryPrice(Map<String, Object> body, double expectedPrice) throws Exception {
@@ -247,5 +272,66 @@ class OrderServiceCoverageTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(ONLY_NEW));
         assertThat(orderByNumber(number).get("status").asText()).isEqualTo("REJECTED");
+    }
+
+    @Test
+    void adminUpdateStatus_invalidTransitionFromDelivered_isRefused() throws Exception {
+        String token = registerCustomer();
+        String admin = adminToken();
+        String number = placeOrder(token, "TAKEAWAY", null);
+        long id = orderByNumber(number).get("id").asLong();
+        adminSetStatus(admin, id, "ACCEPTED");
+        adminSetStatus(admin, id, "DELIVERED");
+
+        adminSetStatusRefused(admin, id, "{\"status\":\"ACCEPTED\",\"rejectReason\":null}",
+                "Cannot transition order from DELIVERED to ACCEPTED");
+        adminSetStatusRefused(admin, id, "{\"status\":\"NEW\",\"rejectReason\":null}",
+                "Cannot transition order from DELIVERED to NEW");
+        assertThat(orderByNumber(number).get("status").asText()).isEqualTo("DELIVERED");
+    }
+
+    @Test
+    void adminUpdateStatus_invalidTransitionFromRejected_isRefused() throws Exception {
+        String token = registerCustomer();
+        String admin = adminToken();
+        String number = placeOrder(token, "TAKEAWAY", null);
+        long id = orderByNumber(number).get("id").asLong();
+        adminSetStatus(admin, id, "REJECTED");
+
+        adminSetStatusRefused(admin, id, "{\"status\":\"ACCEPTED\",\"rejectReason\":null}",
+                "Cannot transition order from REJECTED to ACCEPTED");
+        assertThat(orderByNumber(number).get("status").asText()).isEqualTo("REJECTED");
+    }
+
+    @Test
+    void adminUpdateStatus_rowChangedInTheMeantime_isRefusedAndKeepsNoReason() throws Exception {
+        String token = registerCustomer();
+        String admin = adminToken();
+        String number = placeOrder(token, "TAKEAWAY", null);
+        long id = orderByNumber(number).get("id").asLong();
+        // The compare-and-set finds no NEW row, as if the customer cancelled between read and write.
+        doReturn(0).when(orderRepository).transitionStatus(anyLong(), eq("NEW"), eq("REJECTED"));
+
+        adminSetStatusRefused(admin, id, "{\"status\":\"REJECTED\",\"rejectReason\":\"Out of stock\"}",
+                "Order status changed in the meantime; reload and try again");
+        JsonNode order = orderByNumber(number);
+        assertThat(order.get("status").asText()).isEqualTo("NEW");
+        assertThat(order.get("rejectReason") == null || order.get("rejectReason").isNull()).isTrue();
+    }
+
+    @Test
+    void cancelOrder_refusedRepeat_doesNotCountAgain() throws Exception {
+        String token = registerCustomer();
+        String number = placeOrder(token, "TAKEAWAY", null);
+        double before = cancelledCount();
+
+        mockMvc.perform(post("/api/customer/orders/" + number + "/cancel").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/customer/orders/" + number + "/cancel").header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(ONLY_NEW));
+
+        assertThat(cancelledCount()).isEqualTo(before + 1);
+        assertThat(orderByNumber(number).get("status").asText()).isEqualTo("CANCELLED");
     }
 }
