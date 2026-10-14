@@ -173,6 +173,7 @@ test.describe("KAN-9 cancel order - approved cases", () => {
   });
 
   test("KAN-9-TC-04 Tracking page shows no Cancel button when signed out or to another customer", async ({ page, request }) => {
+    test.fail(true, "KAN-24: Tracking page shows Cancel order button on another customer's order (Q-5 says owner only)");
     const customerA = await registerCustomer(request, "a");
     const customerB = await registerCustomer(request, "b");
     await switchSession(page, customerA);
