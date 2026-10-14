@@ -201,7 +201,6 @@ test.describe("KAN-11 promo codes - approved cases", () => {
   });
 
   test("KAN-11-TC-09 A rejected second code leaves the first code applied", async ({ page }) => {
-    test.fail(true, "KAN-21: applying an unknown second promo code removes the already-applied code (Q-5 says it should stay)");
     await openChefAndAdd(page, B3050);
     await goToCheckout(page, "Takeaway");
     await applyCode(page, "SAVE10");

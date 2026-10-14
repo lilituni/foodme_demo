@@ -23,6 +23,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -149,12 +150,14 @@ class PromoCodeCasesTest {
         int countAfterControl = orderCount(token);
 
         // Step 3: the case's POST with "promoCode": "SAVE10".
-        // expected[2]: the order is not placed, the POST is refused
+        // expected[2]: the order is not placed, the POST is refused with the AC-3 reason
+        // (2,950 AMD subtotal, SAVE10 minimum 3,000 AMD)
         mockMvc.perform(post("/api/order")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(b2950Order("STLC KAN-11 TC-14", "SAVE10")))
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Add 50 AMD more to use this code"));
 
         // Step 4. expected[3]: the order count is the same as after the control order
         assertEquals(countAfterControl, orderCount(token));

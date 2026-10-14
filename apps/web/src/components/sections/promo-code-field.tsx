@@ -8,14 +8,18 @@ import type { PromoQuoteResponse } from "@/types";
 
 // KAN-11: promo code entry in the checkout summary. The parent owns which code is
 // applied and the server quote for it; this only renders the field and messages.
+// `rejectedAttempt` is a second code that was refused while `quote`'s code stays
+// applied (AC-6), so its error and the applied code can show together.
 export function PromoCodeField({
   quote,
+  rejectedAttempt,
   isChecking,
   isError,
   onApply,
   onRemove,
 }: {
   quote: PromoQuoteResponse | undefined;
+  rejectedAttempt?: PromoQuoteResponse;
   isChecking: boolean;
   isError: boolean;
   onApply: (code: string) => void;
@@ -23,14 +27,17 @@ export function PromoCodeField({
 }) {
   const { t } = useTranslation();
   const inputId = useId();
-  const messageId = useId();
+  const errorId = useId();
+  const statusId = useId();
   const [value, setValue] = useState("");
 
-  const rejection = quote && !quote.applies && quote.reason
-    ? t(`promo.errors.${quote.reason}`, { amount: formatAmd(quote.missingAmount ?? 0) })
+  const refused = rejectedAttempt ?? (quote && !quote.applies ? quote : undefined);
+  const rejection = refused?.reason
+    ? t(`promo.errors.${refused.reason}`, { amount: formatAmd(refused.missingAmount ?? 0) })
     : isError
       ? t("promo.errors.generic")
       : null;
+  const describedBy = [rejection && errorId, quote?.applies && statusId].filter(Boolean).join(" ");
 
   return (
     <div className="border-t border-zinc-100 px-5 py-4">
@@ -53,7 +60,7 @@ export function PromoCodeField({
             autoComplete="off"
             autoCapitalize="characters"
             aria-invalid={rejection ? true : undefined}
-            aria-describedby={rejection || quote?.applies ? messageId : undefined}
+            aria-describedby={describedBy || undefined}
           />
         </div>
         <Button type="submit" variant="outline" disabled={isChecking || !value.trim()}>
@@ -62,12 +69,12 @@ export function PromoCodeField({
       </form>
 
       {rejection && (
-        <p id={messageId} role="alert" className="mt-2 text-sm text-red-700">
+        <p id={errorId} role="alert" className="mt-2 text-sm text-red-700">
           {rejection}
         </p>
       )}
       {quote?.applies && (
-        <div id={messageId} className="mt-2 flex items-center justify-between gap-2" role="status">
+        <div id={statusId} className="mt-2 flex items-center justify-between gap-2" role="status">
           <span className="text-sm font-medium text-emerald-700">
             {t("promo.applied", { code: quote.code, percent: quote.percentOff })}
           </span>

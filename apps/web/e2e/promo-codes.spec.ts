@@ -139,7 +139,7 @@ test.describe("promo codes - rejections and placing the order", () => {
     await expect(page.getByRole("alert")).toHaveText("Code not found");
     await expect(promoInput(page)).toHaveAttribute("aria-invalid", "true");
 
-    await applyCode(page, "old15");
+    await applyCode(page, "OLD15");
     await expect(page.getByRole("alert")).toHaveText("This code has expired");
 
     await applyCode(page, "SAVE10");

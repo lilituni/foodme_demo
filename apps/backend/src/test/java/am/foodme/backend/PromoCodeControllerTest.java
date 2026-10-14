@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * KAN-11 promo code pricing (POST /api/order/promo-code). Placing an order with a
- * code lives in OrderControllerTest, because it consumes order_number_seq.
+ * code lives in OrderControllerTest.PlacingWithPromoCode, which resets order_number_seq.
  * Chef 1 (test data): delivery 700 AMD, free from 8,000 AMD.
  */
 @SpringBootTest
@@ -138,7 +138,28 @@ class PromoCodeControllerTest {
     @Test
     void blankCode_isTreatedAsNotFound() throws Exception {
         quote("   ", 10000, "TAKEAWAY")
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applies").value(false))
-                .andExpect(jsonPath("$.reason").value("NOT_FOUND"));
+                .andExpect(jsonPath("$.reason").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Code not found"))
+                .andExpect(jsonPath("$.discount").value(0.0))
+                .andExpect(jsonPath("$.total").value(10000.0));
+    }
+
+    // KAN-11 Q-2: round down, so the customer is never shown more discount than they
+    // get. The server never rounds a fractional discount up to the next AMD: it keeps
+    // the exact amount, and the display rounds it down (KAN-19 covers the UI side).
+    @ParameterizedTest(name = "{0} at subtotal {1} -> discount {2}, total {3}")
+    @CsvSource({
+            "SAVE10, 3005, 300.5, 2704.5",
+            "TREAT15, 8050, 1207.5, 6842.5",
+    })
+    void fractionalDiscount_isNotRoundedUp(String code, double subtotal, double discount, double total)
+            throws Exception {
+        quote(code, subtotal, "TAKEAWAY")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applies").value(true))
+                .andExpect(jsonPath("$.discount").value(discount))
+                .andExpect(jsonPath("$.total").value(total));
     }
 }

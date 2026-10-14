@@ -296,8 +296,10 @@ class OrderPromoCoverageTest {
         String token = registerCustomer();
         String number = placeOrder(token, "TAKEAWAY", Map.of("city", "Yerevan", "street", "Abovyan"));
 
-        JsonNode address = orderByNumber(number).get("addressDto");
-        assertThat(address == null || address.isNull()).isTrue();
+        // The order DTO serialises every field, so a takeaway order carries "addressDto": null.
+        JsonNode order = orderByNumber(number);
+        assertThat(order.has("addressDto")).isTrue();
+        assertThat(order.get("addressDto").isNull()).isTrue();
     }
 
     @Test
