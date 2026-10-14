@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChefHat, Package, Truck, X } from "lucide-react";
+import { Ban, Check, ChefHat, Package, Truck, X, XCircle } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
+import { CancelOrderDialog } from "@/components/sections/cancel-order-dialog";
 import { StarRatingDisplay } from "@/components/sections/star-rating";
 import { formatAmd } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -30,10 +32,14 @@ const STATUS_COPY: Record<string, { title: string; detail: string }> = {
     title: "Order declined",
     detail: "This order couldn’t be fulfilled. Contact support if you need help.",
   },
+  CANCELLED: {
+    title: "Cancelled",
+    detail: "You cancelled this order before the kitchen accepted it.",
+  },
 };
 
 function stepIndex(status: string): number {
-  if (status === "REJECTED") return -1;
+  if (status === "REJECTED" || status === "CANCELLED") return -1;
   const i = STEPS.findIndex((s) => s.key === status);
   return i >= 0 ? i : 0;
 }
@@ -41,11 +47,20 @@ function stepIndex(status: string): number {
 export default function Tracking() {
   const { number } = useParams<{ number: string }>();
   const { isAuthenticated } = useAuth();
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelRefused, setCancelRefused] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["order", number],
     queryFn: () => foodmeApi.getOrderByNumber(number as string),
     enabled: !!number,
+  });
+
+  // Only the order's owner may cancel it, so check it is among the signed-in customer's orders.
+  const { data: myOrders } = useQuery({
+    queryKey: ["my-orders", "tracking"],
+    queryFn: () => foodmeApi.getMyOrders(0, 100),
+    enabled: isAuthenticated,
   });
 
   if (isLoading) {
@@ -87,6 +102,10 @@ export default function Tracking() {
   };
   const active = stepIndex(data.status);
   const rejected = data.status === "REJECTED";
+  // A cancelled order never shows the progress bar - it isn't "in progress".
+  const cancelled = data.status === "CANCELLED";
+  const isOwnOrder = !!myOrders?.list.some((o) => o.number === data.number);
+  const canCancel = isAuthenticated && isOwnOrder && data.status === "NEW";
 
   return (
     <div className="tp_wrap mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
@@ -105,7 +124,17 @@ export default function Tracking() {
 
       <div className="bezel-outer shadow-diffuse mt-8 animate-fade-up [animation-delay:60ms]">
         <div className="bezel-inner p-5 md:p-6">
-          {rejected ? (
+          {cancelled ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200">
+                <Ban size={18} strokeWidth={2} />
+              </div>
+              <div>
+                <p className="font-display text-lg font-bold text-zinc-900">{copy.title}</p>
+                <p className="mt-1 text-sm leading-relaxed text-zinc-500">{copy.detail}</p>
+              </div>
+            </div>
+          ) : rejected ? (
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 ring-1 ring-red-100">
                 <X size={18} strokeWidth={2} />
@@ -173,6 +202,38 @@ export default function Tracking() {
           )}
         </div>
       </div>
+
+      {cancelRefused && (
+        <p role="alert" className="mt-5 rounded-2xl border border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+          {cancelRefused}
+        </p>
+      )}
+
+      {canCancel && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-100 px-5 py-3">
+          <span className="text-sm text-zinc-500">Changed your mind? You can cancel until the kitchen accepts.</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setCancelRefused(null);
+              setConfirmingCancel(true);
+            }}
+          >
+            <XCircle strokeWidth={2} />
+            Cancel order
+          </Button>
+        </div>
+      )}
+
+      {confirmingCancel && (
+        <CancelOrderDialog
+          orderNumber={data.number}
+          open
+          onOpenChange={setConfirmingCancel}
+          onRefused={setCancelRefused}
+        />
+      )}
 
       <div className="bezel-outer shadow-diffuse mt-5 animate-fade-up [animation-delay:120ms]">
         <div className="bezel-inner overflow-hidden">

@@ -148,3 +148,30 @@ test.describe("Admin order review", () => {
     await expect(section.getByText("Admin can see this")).toBeVisible();
   });
 });
+
+// KAN-9 Cancel order - admin sees customer-cancelled orders (KAN-14).
+test.describe("Admin cancelled orders", () => {
+  test("cancelled order: own status, filterable, note shown, no actions", async ({ page, request }) => {
+    const order = await createOrderViaApi(request);
+    const cancel = await request.post(`${API}/api/customer/orders/${order.number}/cancel`, {
+      headers: { Authorization: `Bearer ${order.customerToken}` },
+    });
+    expect(cancel.ok()).toBeTruthy();
+    const { id } = await (await request.get(`${API}/api/order/number/${order.number}`)).json();
+
+    await loginAsAdmin(page);
+
+    // Filter the list to CANCELLED only: our order is there, every row is CANCELLED.
+    await page.goto(`/#/orders?filter=${encodeURIComponent(JSON.stringify({ status: "CANCELLED" }))}`);
+    const row = page.locator("table tbody tr").filter({ hasText: order.number });
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(row.getByText("CANCELLED")).toBeVisible();
+    for (const status of ["NEW", "ACCEPTED", "DELIVERED", "REJECTED"]) {
+      await expect(page.locator("table tbody").getByText(status, { exact: true })).toHaveCount(0);
+    }
+
+    await page.goto(`/#/orders/${id}/show`);
+    await expect(page.getByText("Cancelled by customer")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: /^Mark as/ })).toHaveCount(0);
+  });
+});

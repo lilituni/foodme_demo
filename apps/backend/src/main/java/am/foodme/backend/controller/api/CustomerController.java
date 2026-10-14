@@ -2,6 +2,7 @@ package am.foodme.backend.controller.api;
 
 import am.foodme.backend.dto.CreateOrderReviewDto;
 import am.foodme.backend.dto.CustomerProfileDto;
+import am.foodme.backend.dto.OrderDto;
 import am.foodme.backend.dto.OrderListResponseDto;
 import am.foodme.backend.dto.OrderReviewDto;
 import am.foodme.backend.service.CustomerAuthService;
@@ -43,6 +44,11 @@ public class CustomerController {
                                        @RequestParam(defaultValue = "0") int page,
                                        @RequestParam(defaultValue = "20") int size) {
         return orderService.listForCustomer(authentication.getName(), page, size);
+    }
+
+    @PostMapping("/orders/{number}/cancel")
+    public OrderDto cancelOrder(Authentication authentication, @PathVariable String number) {
+        return orderService.cancelOrder(authentication.getName(), number);
     }
 
     @PostMapping("/orders/{number}/review")
