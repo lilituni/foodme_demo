@@ -10,6 +10,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.transaction.AfterTransaction;
+import org.springframework.test.context.transaction.BeforeTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,26 @@ class PromoCodeCasesTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    private long sequenceBefore;
+
+    /**
+     * The rollback doesn't undo foodme.order_number_seq, and OrderControllerTest assumes the
+     * first API order is FM-100001, so the sequence is restored after each test. This runs
+     * outside the test transaction: ALTER SEQUENCE is DDL and would commit it in H2.
+     */
+    @BeforeTransaction
+    void rememberSequence() {
+        sequenceBefore = jdbc.queryForObject(
+                "SELECT BASE_VALUE FROM INFORMATION_SCHEMA.SEQUENCES "
+                        + "WHERE SEQUENCE_SCHEMA = 'FOODME' AND SEQUENCE_NAME = 'ORDER_NUMBER_SEQ'",
+                Long.class);
+    }
+
+    @AfterTransaction
+    void restoreSequence() {
+        jdbc.execute("ALTER SEQUENCE foodme.order_number_seq RESTART WITH " + sequenceBefore);
+    }
 
     /**
      * The case's data lives on the SUT (chef 17 Verona, dishes 116 and 117); the H2

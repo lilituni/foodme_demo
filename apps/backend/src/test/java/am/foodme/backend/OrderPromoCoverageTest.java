@@ -128,6 +128,29 @@ class OrderPromoCoverageTest {
         return counter == null ? 0.0 : counter.count();
     }
 
+    private double promoCount(String code) {
+        Counter counter = meterRegistry.find("foodme.orders.promo").tag("code", code).counter();
+        return counter == null ? 0.0 : counter.count();
+    }
+
+    /** Places a chef 1 order of {@code quantity} x {@code dishId} with a promo code; returns the placed order. */
+    private JsonNode placePromoOrder(String token, long dishId, int quantity, String deliveryMethod, String code)
+            throws Exception {
+        Map<String, Object> body = orderBody(1, deliveryMethod,
+                "DELIVERY".equals(deliveryMethod) ? Map.of("city", "Yerevan", "street", "Abovyan", "building", "12") : null);
+        body.put("createOrderDishes", List.of(Map.of("dishId", dishId, "quantity", quantity)));
+        body.put("promoCode", code);
+        String response = mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String number = objectMapper.readTree(response).get("number").asText();
+        placedNumbers.add(number);
+        return orderByNumber(number);
+    }
+
     private void deliveryPrice(Map<String, Object> body, double expectedPrice) throws Exception {
         mockMvc.perform(post("/api/order/delivery-price")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -180,6 +203,69 @@ class OrderPromoCoverageTest {
                 .andExpect(jsonPath("$.applies").value(false))
                 .andExpect(jsonPath("$.discount").value(0.0))
                 .andExpect(jsonPath("$.total").value(1700.0));
+    }
+
+    @Test
+    void promoQuote_nullCode_isNotFoundAndKeepsTotal() throws Exception {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", null);
+        body.put("chefId", 1);
+        body.put("subtotal", 3600.0);
+        body.put("deliveryMethod", "DELIVERY");
+        mockMvc.perform(post("/api/order/promo-code")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applies").value(false))
+                .andExpect(jsonPath("$.reason").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.discount").value(0.0))
+                .andExpect(jsonPath("$.total").value(4300.0));
+    }
+
+    @Test
+    void createOrder_deliveryWithSave10_discountsSubtotalOnly() throws Exception {
+        String token = registerCustomer();
+        double promoBefore = promoCount("SAVE10");
+
+        // 2 x Lavash Wrap = 3,600; SAVE10 takes 360 off the subtotal; delivery 700 is not discounted.
+        JsonNode order = placePromoOrder(token, 1, 2, "DELIVERY", "SAVE10");
+
+        assertThat(order.get("promoCode").asText()).isEqualTo("SAVE10");
+        assertThat(order.get("discount").asDouble()).isEqualTo(360.0);
+        assertThat(order.get("deliveryPrice").asDouble()).isEqualTo(700.0);
+        assertThat(order.get("totalPrice").asDouble()).isEqualTo(3940.0);
+        assertThat(promoCount("SAVE10")).isEqualTo(promoBefore + 1);
+    }
+
+    @Test
+    void createOrder_deliveryWithTreat15AboveFreeThreshold_hasNoDeliveryFee() throws Exception {
+        String token = registerCustomer();
+
+        // 2 x Khashlama = 8,400 > 8,000, so delivery is free; TREAT15 takes 1,260 off.
+        JsonNode order = placePromoOrder(token, 2, 2, "DELIVERY", "TREAT15");
+
+        assertThat(order.get("discount").asDouble()).isEqualTo(1260.0);
+        assertThat(order.get("deliveryPrice").asDouble()).isEqualTo(0.0);
+        assertThat(order.get("totalPrice").asDouble()).isEqualTo(7140.0);
+    }
+
+    @Test
+    void createOrder_save10BelowMinimum_isRefusedAndNotCounted() throws Exception {
+        String token = registerCustomer();
+        double placedBefore = placedCount();
+        double promoBefore = promoCount("SAVE10");
+
+        Map<String, Object> body = orderBody(1, "TAKEAWAY", null);
+        body.put("promoCode", "SAVE10"); // 1 x Lavash Wrap = 1,800 < 3,000
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Add 1,200 AMD more to use this code"));
+
+        assertThat(placedCount()).isEqualTo(placedBefore);
+        assertThat(promoCount("SAVE10")).isEqualTo(promoBefore);
     }
 
     @Test
