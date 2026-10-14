@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Package, Star } from "lucide-react";
+import { ChevronRight, Package, Star, XCircle } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
 import { OrderAgainButton } from "@/components/sections/order-again-button";
+import { CancelOrderDialog } from "@/components/sections/cancel-order-dialog";
 import { RateOrderDialog } from "@/components/sections/rate-order-dialog";
 import { StarRatingDisplay } from "@/components/sections/star-rating";
 import { useAuth } from "@/providers/auth-provider";
@@ -16,12 +17,15 @@ const STATUS_LABEL: Record<string, string> = {
   ACCEPTED: "Preparing",
   DELIVERED: "Delivered",
   REJECTED: "Declined",
+  CANCELLED: "Cancelled",
 };
 
 function statusClass(status: string) {
   if (status === "DELIVERED") return "bg-emerald-50 text-emerald-800 ring-emerald-100";
   if (status === "REJECTED") return "bg-red-50 text-red-700 ring-red-100";
   if (status === "ACCEPTED") return "bg-amber-50 text-amber-800 ring-amber-100";
+  // Neutral grey, deliberately distinct from the red "Declined".
+  if (status === "CANCELLED") return "bg-zinc-200/70 text-zinc-600 ring-zinc-300";
   return "bg-zinc-100 text-zinc-700 ring-zinc-200/80";
 }
 
@@ -38,6 +42,8 @@ function formatOrderDate(value: string) {
 export default function Orders() {
   const { isAuthenticated, customer, logout } = useAuth();
   const [ratingOrder, setRatingOrder] = useState<FullOrderDto | null>(null);
+  const [cancellingNumber, setCancellingNumber] = useState<string | null>(null);
+  const [cancelRefused, setCancelRefused] = useState<{ number: string; message: string } | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-orders", customer?.id],
@@ -130,6 +136,27 @@ export default function Orders() {
               <div className="border-t border-zinc-100 px-5 py-3">
                 <OrderAgainButton order={order} />
               </div>
+              {order.status === "NEW" && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
+                  <span className="text-sm text-zinc-500">Changed your mind?</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setCancelRefused(null);
+                      setCancellingNumber(order.number);
+                    }}
+                  >
+                    <XCircle strokeWidth={2} />
+                    Cancel order
+                  </Button>
+                </div>
+              )}
+              {cancelRefused?.number === order.number && (
+                <p role="alert" className="border-t border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+                  {cancelRefused.message}
+                </p>
+              )}
               {order.status === "DELIVERED" && (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
                   {order.review ? (
@@ -157,6 +184,17 @@ export default function Orders() {
             </li>
           ))}
         </ul>
+      )}
+
+      {cancellingNumber && (
+        <CancelOrderDialog
+          orderNumber={cancellingNumber}
+          open
+          onOpenChange={(open) => {
+            if (!open) setCancellingNumber(null);
+          }}
+          onRefused={(message) => setCancelRefused({ number: cancellingNumber, message })}
+        />
       )}
 
       {ratingOrder && (

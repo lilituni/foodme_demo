@@ -22,7 +22,7 @@ public class Order {
     @Column(name = "number")
     private String number;
 
-    /** NEW | ACCEPTED | DELIVERED | REJECTED */
+    /** NEW | ACCEPTED | DELIVERED | REJECTED | CANCELLED (customer-cancelled, final) */
     @Column(name = "status")
     private String status;
 
@@ -44,6 +44,14 @@ public class Order {
 
     @Column(name = "delivery_price")
     private Double deliveryPrice;
+
+    /** KAN-11: the promo code applied to this order (upper-case), if any. */
+    @Column(name = "promo_code", length = 64)
+    private String promoCode;
+
+    /** KAN-11: amount taken off by the promo code; already subtracted from totalPrice. */
+    @Column(name = "discount")
+    private Double discount;
 
     @Column(name = "note", length = 2000)
     private String note;

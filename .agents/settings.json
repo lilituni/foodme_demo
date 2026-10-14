@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "bash workflows/statusline.sh"
+  },
   "hooks": {
     "PreToolUse": [
       {

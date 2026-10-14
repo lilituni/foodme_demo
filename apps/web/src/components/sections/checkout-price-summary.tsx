@@ -1,9 +1,12 @@
+import { useTranslation } from "react-i18next";
 import { formatAmd } from "@/lib/utils";
 
 interface CheckoutPriceSummaryProps {
   subtotal: number;
   deliveryPrice: number;
   freeDeliveryFrom: number;
+  /** KAN-11: an applied promo code and the amount it takes off. */
+  promo?: { code: string; discount: number } | null;
   isLoading?: boolean;
   isError?: boolean;
   embedded?: boolean;
@@ -13,11 +16,13 @@ export function CheckoutPriceSummary({
   subtotal,
   deliveryPrice,
   freeDeliveryFrom,
+  promo = null,
   isLoading = false,
   isError = false,
   embedded = false,
 }: CheckoutPriceSummaryProps) {
-  const total = subtotal + deliveryPrice;
+  const { t } = useTranslation();
+  const total = subtotal + deliveryPrice - (promo?.discount ?? 0);
   const remaining = freeDeliveryFrom - subtotal;
 
   const body = (
@@ -40,6 +45,12 @@ export function CheckoutPriceSummary({
           )}
         </span>
       </div>
+      {promo && (
+        <div className="flex items-center justify-between text-emerald-700">
+          <span>{t("promo.discount_line", { code: promo.code })}</span>
+          <span className="font-semibold tabular-nums">−{formatAmd(promo.discount)}</span>
+        </div>
+      )}
       {!isLoading && !isError && deliveryPrice > 0 && remaining > 0 && (
         <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-100">
           Add {formatAmd(remaining)} more for free delivery.

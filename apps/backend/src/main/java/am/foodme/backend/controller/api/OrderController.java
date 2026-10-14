@@ -4,6 +4,8 @@ import am.foodme.backend.dto.DeliveryPriceRequestDto;
 import am.foodme.backend.dto.DeliveryPriceResponseDto;
 import am.foodme.backend.dto.OrderCreateResponseDto;
 import am.foodme.backend.dto.OrderDto;
+import am.foodme.backend.dto.PromoQuoteRequestDto;
+import am.foodme.backend.dto.PromoQuoteResponseDto;
 import am.foodme.backend.service.OrderService;
 import am.foodme.backend.utils.ControllerUtil;
 import jakarta.validation.Valid;
@@ -28,6 +30,11 @@ public class OrderController {
     @PostMapping("/delivery-price")
     public DeliveryPriceResponseDto deliveryPrice(@RequestBody DeliveryPriceRequestDto request) {
         return orderService.calculateDeliveryPrice(request);
+    }
+
+    @PostMapping("/promo-code")
+    public PromoQuoteResponseDto promoCode(@RequestBody PromoQuoteRequestDto request) {
+        return orderService.quotePromoCode(request);
     }
 
     @PostMapping

@@ -122,6 +122,30 @@ export interface OrderDto {
   note: string;
   addressDto: AddressDto | null;
   createOrderDishes: CreateOrderDishDto[];
+  /** KAN-11: re-checked by the server when the order is placed. */
+  promoCode?: string | null;
+}
+
+export interface PromoQuoteRequest {
+  code: string;
+  chefId: number;
+  subtotal: number;
+  deliveryMethod: DeliveryMethod;
+}
+
+export type PromoRejectReason = "NOT_FOUND" | "EXPIRED" | "BELOW_MINIMUM";
+
+export interface PromoQuoteResponse {
+  code: string;
+  applies: boolean;
+  reason: PromoRejectReason | null;
+  message: string | null;
+  missingAmount: number | null;
+  percentOff: number | null;
+  subtotal: number;
+  deliveryPrice: number;
+  discount: number;
+  total: number;
 }
 
 export interface OrderCreateResponseDto {

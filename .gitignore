@@ -70,3 +70,10 @@ infra/docker-compose.local.yml
 
 # AgentSecrets-generated agent instructions
 .agent/workflows/
+
+# --- Agentic workflows -----------------------------------------------------
+# Run outputs (spec.yaml, gates.yaml, reports, status line file) stay local.
+agentic-workflows/
+
+# Machine-local agent settings (enabled MCP servers etc.)
+.agents/settings.local.json

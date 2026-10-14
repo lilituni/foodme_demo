@@ -8,7 +8,7 @@ import {
     useRecordContext,
 } from 'react-admin';
 import { Chip, Rating } from '@mui/material';
-import { OrderStatus, OrderStatusColors } from '../../constants/OrderStatus.jsx';
+import { OrderStatus, OrderStatusColors, orderStatusLabel } from '../../constants/OrderStatus.jsx';
 
 const orderFilters = [
     <SelectInput
@@ -16,14 +16,14 @@ const orderFilters = [
         source="status"
         label="Status"
         alwaysOn
-        choices={Object.values(OrderStatus).map((status) => ({ id: status, name: status }))}
+        choices={Object.values(OrderStatus).map((status) => ({ id: status, name: orderStatusLabel(status) }))}
     />,
 ];
 
 const OrderStatusField = () => {
     const record = useRecordContext();
     if (!record) return null;
-    return <Chip label={record.status} color={OrderStatusColors[record.status] ?? 'default'} size="small" />;
+    return <Chip label={orderStatusLabel(record.status)} color={OrderStatusColors[record.status] ?? 'default'} size="small" />;
 };
 
 const OrderRatingField = () => {
