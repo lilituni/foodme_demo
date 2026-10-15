@@ -276,10 +276,10 @@ test("a line from before KAN-10 (no dish reference) is named as no longer availa
     const response = await route.fetch();
     const json = await response.json();
     const order = json.list.find((o: { number: string }) => o.number === number);
-    if (order) {
-      const legacy = order.orderDishList.find((l: { nameEn: string }) => l.nameEn === withExtra.nameEn);
-      delete legacy.dishId;
-    }
+    expect(order, `order ${number} in the history`).toBeDefined();
+    const legacy = order.orderDishList.find((l: { nameEn: string }) => l.nameEn === withExtra.nameEn);
+    expect(legacy, `${withExtra.nameEn} line in order ${number}`).toBeDefined();
+    delete legacy.dishId;
     await route.fulfill({ response, json });
   });
   await signIn(page, email, "/orders");
@@ -321,6 +321,29 @@ test.describe("order again - basket from a different chef", () => {
     await expect(page.locator(".cs_wrap .grid")).toHaveCount(1);
     await expect(await checkoutLine(page, other.nameEn)).toContainText("3×");
   });
+});
+
+test("basket with the same dish from the same chef: replaced by the old order, not added on top (Q-2)", async ({
+  page,
+  request,
+}) => {
+  const { token, email } = await registerCustomerViaApi(request, API);
+  const { chefId, other } = await findChefWithExtras(request);
+  const number = await placeOrderViaApi(request, token, chefId, [{ dishId: other.id, quantity: 3 }]);
+
+  // 1 × the very dish the old order has, so merging would show 4×.
+  await page.goto(`/chef/${chefId}`);
+  await page.locator("button.dc_card").filter({ hasText: other.nameEn }).first().click();
+  await page.getByRole("button", { name: "Add to cart" }).click();
+  await expect(page.locator("aside.uc-panel .cic_root")).toHaveCount(1);
+
+  await signIn(page, email, "/orders");
+  await page.getByRole("listitem").filter({ hasText: number }).getByRole("button", { name: "Order again" }).click();
+
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.locator(".cs_wrap .grid")).toHaveCount(1);
+  await expect(await checkoutLine(page, other.nameEn)).toContainText("3×");
 });
 
 test("while rebuilding, the button shows loading and can't be pressed twice", async ({ page, request }) => {

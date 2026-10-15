@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -332,20 +333,35 @@ class OrderControllerTest {
         }
 
         // The order_dish_addition id comes from a sequence (IDENTITY failed on Postgres for
-        // every order with an extra). Dish addition 1 (Extra herbs on Khashlama) is in data.sql.
+        // every order with an extra). Two extras on one line take two ids from it. Dish
+        // additions 1 (Extra herbs) and 2 (Extra cheese) on Khashlama are in data.sql.
         @Test
-        void orderHistory_orderWithExtra_savesAndReturnsTheExtra() throws Exception {
+        void orderHistory_orderWithTwoExtras_savesAndReturnsBoth() throws Exception {
             String token = customerToken();
-            placeOrder(token, List.of(
-                    Map.of("dishId", 2, "quantity", 2, "additions", List.of(Map.of("additionId", 1)))));
+            placeOrder(token, List.of(Map.of("dishId", 2, "quantity", 2,
+                    "additions", List.of(Map.of("additionId", 1), Map.of("additionId", 2)))));
 
             mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.list[0].orderDishList[0].dishId").value(2))
                     .andExpect(jsonPath("$.list[0].orderDishList[0].quantity").value(2))
-                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions.length()").value(1))
-                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[0].nameEn").value("Extra herbs"))
-                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[0].id").isNumber());
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions.length()").value(2))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[*].nameEn",
+                            containsInAnyOrder("Extra herbs", "Extra cheese")))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[0].id").isNumber())
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[1].id").isNumber());
+        }
+
+        // The dish references are only for the order's own customer: another customer's
+        // history doesn't list the order at all.
+        @Test
+        void orderHistory_ofAnotherCustomer_doesNotListTheOrder() throws Exception {
+            placeOrder(customerToken(), List.of(Map.of("dishId", 2, "quantity", 1)));
+            String placed = placedNumbers.get(0);
+
+            mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + customerToken()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.list[?(@.number == '" + placed + "')]").isEmpty());
         }
 
         // KAN-15: a legacy line whose dish can't be traced is still listed, just without the reference.

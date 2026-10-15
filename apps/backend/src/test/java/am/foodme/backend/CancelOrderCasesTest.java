@@ -96,8 +96,9 @@ class CancelOrderCasesTest {
     void removePlacedOrders() {
         placedNumbers.forEach(number -> orderRepository.findByNumber(number).ifPresent(orderRepository::delete));
         jdbc.execute("ALTER SEQUENCE foodme.order_number_seq RESTART WITH " + sequenceBefore);
-        // Chef 17 is not in data.sql; left ACTIVE it adds to other classes' chef counts.
-        jdbc.update("UPDATE foodme.chef SET status = 'INACTIVE' WHERE id = 17");
+        // Remove what seedChefVerona added, so other classes see only data.sql's chefs.
+        jdbc.update("DELETE FROM foodme.dish WHERE id = 132");
+        jdbc.update("DELETE FROM foodme.chef WHERE id = 17");
     }
 
     private String registerCustomer(String who) throws Exception {
