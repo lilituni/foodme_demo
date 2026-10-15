@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Package, Star, XCircle } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
+import { OrderAgainButton } from "@/components/sections/order-again-button";
 import { CancelOrderDialog } from "@/components/sections/cancel-order-dialog";
 import { RateOrderDialog } from "@/components/sections/rate-order-dialog";
 import { StarRatingDisplay } from "@/components/sections/star-rating";
@@ -132,6 +133,9 @@ export default function Orders() {
                   </div>
                 </div>
               </Link>
+              <div className="border-t border-zinc-100 px-5 py-3">
+                <OrderAgainButton order={order} />
+              </div>
               {order.status === "NEW" && (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
                   <span className="text-sm text-zinc-500">Changed your mind?</span>

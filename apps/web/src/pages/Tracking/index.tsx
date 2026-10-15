@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Ban, Check, ChefHat, Package, Truck, X, XCircle } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { Button } from "@/components/ui/button";
+import { OrderAgainButton } from "@/components/sections/order-again-button";
 import { CancelOrderDialog } from "@/components/sections/cancel-order-dialog";
 import { StarRatingDisplay } from "@/components/sections/star-rating";
 import { formatAmd } from "@/lib/utils";
@@ -265,6 +266,12 @@ export default function Tracking() {
               {formatAmd(data.totalPrice)}
             </span>
           </div>
+          {/* KAN-10 Q-5: only the order's own customer may reorder it (KAN-25). */}
+          {isAuthenticated && isOwnOrder && (
+            <div className="border-t border-zinc-100 px-5 py-3">
+              <OrderAgainButton order={data} />
+            </div>
+          )}
         </div>
       </div>
 

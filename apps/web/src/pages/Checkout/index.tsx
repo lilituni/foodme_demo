@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, ShoppingBag } from "lucide-react";
 import { foodmeApi } from "@/api/foodme";
 import { AuthPanel } from "@/components/sections/auth-panel";
 import { CheckoutSummary } from "@/components/sections/checkout-summary";
 import { CheckoutPriceSummary } from "@/components/sections/checkout-price-summary";
+import type { ReorderLocationState } from "@/components/sections/order-again-button";
 import { PromoCodeField } from "@/components/sections/promo-code-field";
 import { ApiRequestError } from "@/api/client";
 import { OrderDeliveryForm } from "@/components/sections/order-delivery-form";
@@ -17,6 +18,8 @@ import type { OrderDto, PromoQuoteResponse } from "@/types";
 
 export default function Checkout() {
   const navigate = useNavigate();
+  // KAN-10: "Order again" lands here with a note about dishes it had to skip.
+  const reorderNotice = (useLocation().state as ReorderLocationState | null)?.reorderNotice;
   const queryClient = useQueryClient();
   const { items, subtotal } = useCart();
   const { isAuthenticated, customer, logout } = useAuth();
@@ -179,6 +182,11 @@ export default function Checkout() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-zinc-900 md:text-4xl">
           Checkout
         </h1>
+        {reorderNotice && (
+          <p role="status" className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-100">
+            {reorderNotice}
+          </p>
+        )}
       </div>
 
       {!isAuthenticated ? (

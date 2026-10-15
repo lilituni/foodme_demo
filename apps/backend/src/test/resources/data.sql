@@ -35,3 +35,8 @@ INSERT INTO foodme.promo_code (id, code, percent_off, min_order_amount, expires_
 (1, 'SAVE10', 10, 3000, NULL),
 (2, 'TREAT15', 15, 8000, NULL),
 (3, 'OLD15', 15, 0, TIMESTAMP '2025-12-31 23:59:59');
+
+-- KAN-10: two extras, so placing an order with extras is covered (OrderControllerTest).
+INSERT INTO foodme.dish_addition (id, name_en, name_am, name_ru, price, dish_id) VALUES
+(1, 'Extra herbs', 'Կանաչի', 'Зелень', 300.0, 2),
+(2, 'Extra cheese', 'Պանիր', 'Сыр', 400.0, 2);
