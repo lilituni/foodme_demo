@@ -1,6 +1,7 @@
 package am.foodme.backend.dto;
 
 import am.foodme.backend.model.Order;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,6 +25,7 @@ public class OrderDto {
     private String receiverEmail;
     private String paymentType;
     private String deliveryMethod;
+    @Size(max = 2000, message = "Note must be at most 2000 characters")
     private String note;
     private String status;
     private String rejectReason;

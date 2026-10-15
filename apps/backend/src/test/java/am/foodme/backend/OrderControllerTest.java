@@ -90,9 +90,21 @@ class OrderControllerTest {
         return objectMapper.writeValueAsString(body);
     }
 
+    @Test
+    void createOrder_noteLongerThan2000_isRejectedWith400() throws Exception {
+        String token = customerToken();
+        Map<String, Object> body = new HashMap<>(objectMapper.readValue(cashOrderPayload(), Map.class));
+        body.put("note", "x".repeat(2001));
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
     @Order(3)
     @Test
-    void createOrder_cashPayment_succeeds() throws Exception {
+    void createOrder_cashPayment_succeeds()throws Exception {
         String token = customerToken();
         String response = mockMvc.perform(post("/api/order")
                         .header("Authorization", "Bearer " + token)
