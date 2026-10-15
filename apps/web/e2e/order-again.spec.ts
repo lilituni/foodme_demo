@@ -346,29 +346,50 @@ test("basket with the same dish from the same chef: replaced by the old order, n
   await expect(await checkoutLine(page, other.nameEn)).toContainText("3×");
 });
 
-test("while rebuilding, the button shows loading and can't be pressed twice", async ({ page, request }) => {
+// The double press is KAN-10-TC-13 in kan-10-cases.spec.ts.
+
+test("menu request fails: customer is told to try again and the basket is untouched", async ({ page, request }) => {
   const { token, email } = await registerCustomerViaApi(request, API);
   const { chefId, other } = await findChefWithExtras(request);
   const number = await placeOrderViaApi(request, token, chefId, [{ dishId: other.id, quantity: 2 }]);
 
-  // Hold the menu request until we've checked the loading state.
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route(`**/api/chef/${chefId}`, async (route) => {
-    await held;
-    await route.continue();
-  });
+  await addDishFromAnotherChef(page, request, chefId);
+  await page.route(`**/api/chef/${chefId}`, (route) => route.fulfill({ status: 500, json: { message: "Server error" } }));
   await signIn(page, email, "/orders");
+
   const card = page.getByRole("listitem").filter({ hasText: number });
   await card.getByRole("button", { name: "Order again" }).click();
 
-  const loading = card.getByRole("button", { name: "Adding to basket…" });
-  await expect(loading).toBeDisabled();
-  await loading.click({ force: true }); // a second press must not add the dishes twice
-  release();
+  await expect(card.getByRole("alert")).toHaveText("Couldn’t rebuild your basket. Please try again.");
+  await expect(card.getByRole("button", { name: "Order again" })).toBeEnabled();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page.getByRole("link", { name: "Cart, 1 items" })).toBeVisible();
+});
+
+test("an extra renamed since the order is left out; the dish is added at today's price", async ({ page, request }) => {
+  const { token, email } = await registerCustomerViaApi(request, API);
+  const { chefId, withExtra } = await findChefWithExtras(request);
+  const extra = withExtra.additions![0];
+  const number = await placeOrderViaApi(request, token, chefId, [
+    { dishId: withExtra.id, quantity: 1, additionIds: [extra.id] },
+  ]);
+
+  // Extras are matched by name, so a renamed extra counts as no longer offered.
+  await patchMenu(page, chefId, (dishes) => {
+    const d = dishes.find((x) => x.id === withExtra.id)!;
+    d.price = 1000;
+    d.additions!.find((a) => a.id === extra.id)!.nameEn = `${extra.nameEn} (new recipe)`;
+  });
+  await signIn(page, email, "/orders");
+  await page.getByRole("listitem").filter({ hasText: number }).getByRole("button", { name: "Order again" }).click();
 
   await expect(page).toHaveURL(/\/checkout$/);
-  await expect(await checkoutLine(page, other.nameEn)).toContainText("2×");
+  await expect(page.locator(".cs_wrap .grid")).toHaveCount(1);
+  const line = await checkoutLine(page, withExtra.nameEn);
+  await expect(line).toContainText("1×");
+  await expect(line).not.toContainText(extra.nameEn);
+  await expect(line).toContainText("1,000 AMD");
 });
 
 test("tracking page offers Order again only when signed in", async ({ page, request }) => {

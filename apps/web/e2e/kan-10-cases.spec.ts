@@ -303,9 +303,14 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await setSignedIn(page, customer);
 
     // Hold the menu check until both presses are made, so the rebuild is in progress.
+    // Each rebuild asks for the menu once from /orders (checkout's own fetch comes from
+    // /checkout). The basket is cleared before a rebuild, so a second run would still end
+    // at 2× / 1× - the request count is what shows it ran only once.
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
+    let rebuildMenuRequests = 0;
     await page.route(`**/api/chef/${CHEF}`, async (route) => {
+      if (new URL(page.url()).pathname === "/orders") rebuildMenuRequests++;
       await held;
       await route.continue();
     });
@@ -324,6 +329,7 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await expectLine(page, 2, "Crispy Salad", "Sweet Chile");
     await expectLine(page, 1, "Bukkake Udon");
     await expect(subtotal(page)).toHaveText("5,500 AMD"); // expected[3]
+    expect(rebuildMenuRequests, "rebuilds started from /orders").toBe(1); // expected[2]: added once
   });
 
   test.describe("mobile", () => {
