@@ -49,8 +49,9 @@ export async function planReorder(order: FullOrderDto): Promise<ReorderPlan> {
 }
 
 /**
- * Puts the plan into the basket. Returns "mismatch" without touching anything when
+ * Replaces the basket with the plan. Returns "mismatch" without touching anything when
  * the basket holds another chef's food and the customer hasn't agreed to replace it.
+ * The same chef's basket is replaced without asking (Q-2), never merged (KAN-26).
  */
 export async function applyReorder(
   plan: ReorderPlan,
@@ -58,10 +59,10 @@ export async function applyReorder(
 ): Promise<"ok" | "mismatch"> {
   return db.transaction("rw", db.products, async () => {
     const basketChefId = await getCartChefId();
-    if (basketChefId !== undefined && basketChefId !== plan.chefId) {
-      if (!options?.replaceOtherChef) return "mismatch";
-      await clearCart();
+    if (basketChefId !== undefined && basketChefId !== plan.chefId && !options?.replaceOtherChef) {
+      return "mismatch";
     }
+    await clearCart();
     for (const { dish, quantity } of plan.items) {
       await addDishToCart(dish, quantity);
     }

@@ -267,73 +267,121 @@ class OrderControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // KAN-10/KAN-15: order history carries the menu dish of every line and the
-    // order's chef, so "Order again" can rebuild the basket. Ordered after the
-    // FM-FLAKE-02 cases because placing an order consumes order_number_seq.
-    @Order(9)
-    @Test
-    void orderHistory_afterPlacingOrder_showsDishReferencePerLineAndChef() throws Exception {
-        String token = customerToken();
-        Map<String, Object> body = Map.of(
-                "chefId", 1,
-                "receiverName", "Ann",
-                "receiverPhoneNumber", "+37491234567",
-                "receiverEmail", "ann@example.com",
-                "paymentType", "CASH",
-                "deliveryMethod", "TAKEAWAY",
-                "createOrderDishes", List.of(
-                        Map.of("dishId", 2, "quantity", 1),
-                        Map.of("dishId", 1, "quantity", 3))
-        );
-        mockMvc.perform(post("/api/order")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(body)))
-                .andExpect(status().isOk());
+    /**
+     * KAN-10/KAN-15: order history carries what "Order again" needs to rebuild the
+     * basket. Like PlacingWithPromoCode below, these tests delete what they placed and
+     * restart order_number_seq afterwards, so they don't depend on running order.
+     */
+    @Nested
+    class OrderHistoryForReorder {
 
-        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.list[0].chefId").value(1))
-                .andExpect(jsonPath("$.list[0].orderDishList.length()").value(2))
-                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].dishId").value(2))
-                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].quantity").value(1))
-                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].dishId").value(1))
-                .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].quantity").value(3));
-    }
+        @Autowired
+        private JdbcTemplate jdbc;
 
-    // KAN-15: a legacy line whose dish can't be traced is still listed, just without the reference.
-    @Order(10)
-    @Test
-    void orderHistory_legacyLineWithoutDish_isShownWithoutReference() throws Exception {
-        String token = customerToken();
-        String email = objectMapper.readTree(mockMvc.perform(get("/api/customer/me")
-                        .header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString()).get("email").asText();
+        private final List<String> placedNumbers = new ArrayList<>();
+        private long sequenceBefore;
 
-        am.foodme.backend.model.Order order = new am.foodme.backend.model.Order();
-        order.setNumber("LG-" + UUID.randomUUID().toString().substring(0, 8));
-        order.setStatus("DELIVERED");
-        order.setChef(chefRepository.findById(1L).orElseThrow());
-        order.setCustomer(customerRepository.findByEmail(email).orElseThrow());
-        order.setReceiverName("Ann");
-        order.setPaymentType("CASH");
-        order.setDeliveryMethod("TAKEAWAY");
-        order.setTotalPrice(2000.0);
-        order.setDeliveryPrice(0.0);
-        order.setCreatedAt(java.time.LocalDateTime.now());
-        OrderDish line = new OrderDish();
-        line.setOrder(order);
-        line.setNameEn("Retired Dish");
-        line.setPrice(2000.0);
-        line.setQuantity(1);
-        order.setOrderDishList(List.of(line));
-        orderRepository.save(order);
+        @BeforeEach
+        void rememberSequence() {
+            sequenceBefore = jdbc.queryForObject(
+                    "SELECT BASE_VALUE FROM INFORMATION_SCHEMA.SEQUENCES "
+                            + "WHERE SEQUENCE_SCHEMA = 'FOODME' AND SEQUENCE_NAME = 'ORDER_NUMBER_SEQ'",
+                    Long.class);
+        }
 
-        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.list[0].orderDishList[0].nameEn").value("Retired Dish"))
-                .andExpect(jsonPath("$.list[0].orderDishList[0].quantity").value(1))
-                .andExpect(jsonPath("$.list[0].orderDishList[0].dishId").doesNotExist());
+        @AfterEach
+        void removePlacedOrders() {
+            placedNumbers.forEach(number -> orderRepository.findByNumber(number).ifPresent(orderRepository::delete));
+            jdbc.execute("ALTER SEQUENCE foodme.order_number_seq RESTART WITH " + sequenceBefore);
+        }
+
+        private void placeOrder(String token, List<Map<String, Object>> dishes) throws Exception {
+            Map<String, Object> body = Map.of(
+                    "chefId", 1,
+                    "receiverName", "Ann",
+                    "receiverPhoneNumber", "+37491234567",
+                    "receiverEmail", "ann@example.com",
+                    "paymentType", "CASH",
+                    "deliveryMethod", "TAKEAWAY",
+                    "createOrderDishes", dishes
+            );
+            String response = mockMvc.perform(post("/api/order")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(body)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            placedNumbers.add(objectMapper.readTree(response).get("number").asText());
+        }
+
+        @Test
+        void orderHistory_afterPlacingOrder_showsDishReferencePerLineAndChef() throws Exception {
+            String token = customerToken();
+            placeOrder(token, List.of(
+                    Map.of("dishId", 2, "quantity", 1),
+                    Map.of("dishId", 1, "quantity", 3)));
+
+            mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.list[0].chefId").value(1))
+                    .andExpect(jsonPath("$.list[0].orderDishList.length()").value(2))
+                    .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].dishId").value(2))
+                    .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Khashlama')].quantity").value(1))
+                    .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].dishId").value(1))
+                    .andExpect(jsonPath("$.list[0].orderDishList[?(@.nameEn == 'Lavash Wrap')].quantity").value(3));
+        }
+
+        // The order_dish_addition id comes from a sequence (IDENTITY failed on Postgres for
+        // every order with an extra). Dish addition 1 (Extra herbs on Khashlama) is in data.sql.
+        @Test
+        void orderHistory_orderWithExtra_savesAndReturnsTheExtra() throws Exception {
+            String token = customerToken();
+            placeOrder(token, List.of(
+                    Map.of("dishId", 2, "quantity", 2, "additions", List.of(Map.of("additionId", 1)))));
+
+            mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].dishId").value(2))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].quantity").value(2))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions.length()").value(1))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[0].nameEn").value("Extra herbs"))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].additions[0].id").isNumber());
+        }
+
+        // KAN-15: a legacy line whose dish can't be traced is still listed, just without the reference.
+        @Test
+        void orderHistory_legacyLineWithoutDish_isShownWithoutReference() throws Exception {
+            String token = customerToken();
+            String email = objectMapper.readTree(mockMvc.perform(get("/api/customer/me")
+                            .header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getContentAsString()).get("email").asText();
+
+            am.foodme.backend.model.Order order = new am.foodme.backend.model.Order();
+            order.setNumber("LG-" + UUID.randomUUID().toString().substring(0, 8));
+            order.setStatus("DELIVERED");
+            order.setChef(chefRepository.findById(1L).orElseThrow());
+            order.setCustomer(customerRepository.findByEmail(email).orElseThrow());
+            order.setReceiverName("Ann");
+            order.setPaymentType("CASH");
+            order.setDeliveryMethod("TAKEAWAY");
+            order.setTotalPrice(2000.0);
+            order.setDeliveryPrice(0.0);
+            order.setCreatedAt(java.time.LocalDateTime.now());
+            OrderDish line = new OrderDish();
+            line.setOrder(order);
+            line.setNameEn("Retired Dish");
+            line.setPrice(2000.0);
+            line.setQuantity(1);
+            order.setOrderDishList(List.of(line));
+            orderRepository.save(order);
+            placedNumbers.add(order.getNumber());
+
+            mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].nameEn").value("Retired Dish"))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].quantity").value(1))
+                    .andExpect(jsonPath("$.list[0].orderDishList[0].dishId").doesNotExist());
+        }
     }
 
     /**

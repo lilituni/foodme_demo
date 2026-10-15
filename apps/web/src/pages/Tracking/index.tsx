@@ -266,7 +266,8 @@ export default function Tracking() {
               {formatAmd(data.totalPrice)}
             </span>
           </div>
-          {isAuthenticated && (
+          {/* KAN-10 Q-5: only the order's own customer may reorder it (KAN-25). */}
+          {isAuthenticated && isOwnOrder && (
             <div className="border-t border-zinc-100 px-5 py-3">
               <OrderAgainButton order={data} />
             </div>

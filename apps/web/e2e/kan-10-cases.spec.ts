@@ -12,7 +12,9 @@ import { test, expect, devices, type APIRequestContext, type Page } from "@playw
 const API = process.env.VITE_API_BASE_URL || "http://localhost:8081";
 const AUTH_KEY = "foodme.customer.auth";
 
-// Chef 24 Alans Kitchen and its dishes, as in plan.md's test data.
+// Chef 24 Alans Kitchen and its dishes, as in plan.md's test data. The ids are fixed on
+// purpose: they come from the seed migrations, and every case's expected names and
+// prices (e.g. "Subtotal 5,500 AMD") are this seed data's values.
 const CHEF = 24;
 const CRISPY_SALAD = 349;
 const SWEET_CHILE = 476;
@@ -30,9 +32,11 @@ const O2: OrderDish[] = [
   { dishId: KAKE_UDON, quantity: 1 },
 ];
 
-// The admin changes below touch chef 24's shared menu, so this file's tests run
-// one after another (not fully parallel) and every change is undone in `finally`.
-test.describe.configure({ mode: "default" });
+// Checkout re-fetches the chef menu, so a stubbed route can still be in flight
+// when a test finishes; drop it quietly instead of failing the worker.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
 
 type Customer = { token: string; auth: string; email: string };
 
@@ -74,30 +78,17 @@ async function placeOrder(request: APIRequestContext, customer: Customer, note: 
   return (await res.json()).number as string;
 }
 
-/** Back-office change to dishes (local seed admin), undone after `body` whatever happens. */
-async function withDishChanges(
-  request: APIRequestContext,
-  changes: Record<number, Record<string, unknown>>,
-  body: () => Promise<void>,
-) {
-  const login = await request.post(`${API}/admin/auth/login`, { data: { username: "admin", password: "admin123" } });
-  expect(login.ok()).toBeTruthy(); // sync: admin signed in
-  const headers = { Authorization: `Bearer ${(await login.json()).token}` };
-  const originals: Record<string, unknown>[] = [];
-  try {
-    for (const [id, change] of Object.entries(changes)) {
-      const dish = await (await request.get(`${API}/admin/dish/${id}`, { headers })).json();
-      originals.push(dish);
-      const put = await request.put(`${API}/admin/dish/${id}`, { headers, data: { ...dish, ...change } });
-      expect(put.ok()).toBeTruthy(); // sync: back-office change saved
-    }
-    await body();
-  } finally {
-    for (const dish of originals) {
-      const back = await request.put(`${API}/admin/dish/${dish.id}`, { headers, data: dish });
-      expect(back.ok()).toBeTruthy(); // sync: back-office change undone
-    }
-  }
+/**
+ * "The admin changed these dishes": this page is served chef 24's menu with the changes
+ * applied. Only this test's page sees them; the shared seed data is never edited.
+ */
+async function serveMenuWithChanges(page: Page, changes: Record<number, Record<string, unknown>>) {
+  await page.route(`**/api/chef/${CHEF}`, async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    for (const dish of json.dishes ?? []) Object.assign(dish, changes[dish.id]);
+    await route.fulfill({ response, json });
+  });
 }
 
 /** Opens the dish on the chef page and adds 1 of it (no extras) to the cart. */
@@ -170,7 +161,6 @@ const mobile375 = { ...pixel7, viewport: { width: 375, height: 812 } };
 
 test.describe("KAN-10 Order again - approved cases", () => {
   test("KAN-10-TC-02 Order tracking page: Order again only for the order's own signed-in customer", async ({ page, request }) => {
-    test.fail(true, "KAN-25: KAN-10: \"Order again\" shown on another customer's order tracking page (Q-5 says own orders only)");
     const a = await registerCustomer(request);
     const b = await registerCustomer(request);
     const number = await placeOrder(request, a, "STLC KAN-10 KAN-10-TC-02 auto", O1);
@@ -201,16 +191,15 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await placeOrder(request, customer, "STLC KAN-10 KAN-10-TC-04 auto", O1);
     await setSignedIn(page, customer);
 
-    await withDishChanges(request, { [BUKKAKE_UDON]: { status: "INACTIVE" } }, async () => {
-      await pressOrderAgain(page);
+    await serveMenuWithChanges(page, { [BUKKAKE_UDON]: { status: "INACTIVE" } });
+    await pressOrderAgain(page);
 
-      await expect(page.getByText("1 item is no longer available: Bukkake Udon.", { exact: true })).toBeVisible(); // expected[1]
-      await expect(page).toHaveURL(/\/checkout/); // expected[2]
-      // expected[3]: 2 × Crispy Salad with Sweet Chile and no Bukkake Udon
-      await expectLine(page, 2, "Crispy Salad", "Sweet Chile");
-      await expect(checkoutLine(page, "Bukkake Udon")).toHaveCount(0);
-      await expect(subtotal(page)).toHaveText("4,000 AMD"); // expected[4]
-    });
+    await expect(page.getByText("1 item is no longer available: Bukkake Udon.", { exact: true })).toBeVisible(); // expected[1]
+    await expect(page).toHaveURL(/\/checkout/); // expected[2]
+    // expected[3]: 2 × Crispy Salad with Sweet Chile and no Bukkake Udon
+    await expectLine(page, 2, "Crispy Salad", "Sweet Chile");
+    await expect(checkoutLine(page, "Bukkake Udon")).toHaveCount(0);
+    await expect(subtotal(page)).toHaveText("4,000 AMD"); // expected[4]
   });
 
   test("KAN-10-TC-05 Two dishes no longer offered: both skipped and named in the plural message", async ({ page, request }) => {
@@ -218,19 +207,18 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await placeOrder(request, customer, "STLC KAN-10 KAN-10-TC-05 auto", O2);
     await setSignedIn(page, customer);
 
-    await withDishChanges(request, { [BUKKAKE_UDON]: { status: "INACTIVE" }, [KAKE_UDON]: { status: "INACTIVE" } }, async () => {
-      await pressOrderAgain(page);
+    await serveMenuWithChanges(page, { [BUKKAKE_UDON]: { status: "INACTIVE" }, [KAKE_UDON]: { status: "INACTIVE" } });
+    await pressOrderAgain(page);
 
-      // expected[1]: the two names in either order (cases gate, J3 on TC-05)
-      await expect(
-        page.getByText(/^2 items are no longer available: (Bukkake Udon, Kake udon|Kake udon, Bukkake Udon)\.$/),
-      ).toBeVisible();
-      await expect(page).toHaveURL(/\/checkout/); // expected[2]
-      // expected[3]: only 1 × Crispy Salad
-      await expect(page.locator(".cs_wrap div.grid")).toHaveCount(1);
-      await expectLine(page, 1, "Crispy Salad");
-      await expect(subtotal(page)).toHaveText("1,800 AMD"); // expected[4]
-    });
+    // expected[1]: the two names in either order (cases gate, J3 on TC-05)
+    await expect(
+      page.getByText(/^2 items are no longer available: (Bukkake Udon, Kake udon|Kake udon, Bukkake Udon)\.$/),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/checkout/); // expected[2]
+    // expected[3]: only 1 × Crispy Salad
+    await expect(page.locator(".cs_wrap div.grid")).toHaveCount(1);
+    await expectLine(page, 1, "Crispy Salad");
+    await expect(subtotal(page)).toHaveText("1,800 AMD"); // expected[4]
   });
 
   test("KAN-10-TC-07 A price raised since the order: today's price is used", async ({ page, request }) => {
@@ -238,13 +226,12 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await placeOrder(request, customer, "STLC KAN-10 KAN-10-TC-07 auto", O1);
     await setSignedIn(page, customer);
 
-    await withDishChanges(request, { [BUKKAKE_UDON]: { price: 1700 } }, async () => {
-      await pressOrderAgain(page);
-      await expect(page).toHaveURL(/\/checkout/); // sync: rebuilt basket shown
+    await serveMenuWithChanges(page, { [BUKKAKE_UDON]: { price: 1700 } });
+    await pressOrderAgain(page);
+    await expect(page).toHaveURL(/\/checkout/); // sync: rebuilt basket shown
 
-      await expect(checkoutLine(page, "Bukkake Udon").locator("span").last()).toHaveText("1,700 AMD"); // expected[1]
-      await expect(subtotal(page)).toHaveText("5,700 AMD"); // expected[2]
-    });
+    await expect(checkoutLine(page, "Bukkake Udon").locator("span").last()).toHaveText("1,700 AMD"); // expected[1]
+    await expect(subtotal(page)).toHaveText("5,700 AMD"); // expected[2]
   });
 
   test("KAN-10-TC-08 Basket has another chef's food, customer answers No: basket unchanged", async ({ page, request }) => {
@@ -280,7 +267,6 @@ test.describe("KAN-10 Order again - approved cases", () => {
   });
 
   test("KAN-10-TC-10 Basket has the same chef's food: replaced without asking", async ({ page, request }) => {
-    test.fail(true, "KAN-26: KAN-10: Order again adds the old order to a same-chef basket instead of replacing it (Q-2)");
     const customer = await registerCustomer(request);
     await placeOrder(request, customer, "STLC KAN-10 KAN-10-TC-10 auto", O1);
     await setSignedIn(page, customer);
@@ -303,13 +289,12 @@ test.describe("KAN-10 Order again - approved cases", () => {
     await setSignedIn(page, customer);
     await addDish(page, 17, "Quiche with mushrooms");
 
-    await withDishChanges(request, { [CRISPY_SALAD]: { status: "INACTIVE" }, [BUKKAKE_UDON]: { status: "INACTIVE" } }, async () => {
-      await pressOrderAgain(page);
+    await serveMenuWithChanges(page, { [CRISPY_SALAD]: { status: "INACTIVE" }, [BUKKAKE_UDON]: { status: "INACTIVE" } });
+    await pressOrderAgain(page);
 
-      await expect(page.getByText("None of these dishes are available anymore", { exact: true })).toBeVisible(); // expected[1]
-      await expect(page.getByText(REPLACE_QUESTION, { exact: true })).toHaveCount(0); // expected[2]
-      await expectBasketOnly(page, 17, "Quiche with mushrooms", "1,200 AMD"); // expected[3]
-    });
+    await expect(page.getByText("None of these dishes are available anymore", { exact: true })).toBeVisible(); // expected[1]
+    await expect(page.getByText(REPLACE_QUESTION, { exact: true })).toHaveCount(0); // expected[2]
+    await expectBasketOnly(page, 17, "Quiche with mushrooms", "1,200 AMD"); // expected[3]
   });
 
   test("KAN-10-TC-13 Double press during the rebuild: loading state, dishes added once", async ({ page, request }) => {

@@ -1,4 +1,4 @@
-import { test, expect, devices, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, devices, type APIRequestContext, type Page, type Route } from "@playwright/test";
 import { createAccountAtCheckout, registerCustomerViaApi } from "./auth";
 
 // KAN-10 Order again - storefront (KAN-16).
@@ -231,6 +231,66 @@ test.describe("order again - menu changed since the order", () => {
   });
 });
 
+test.describe("order again - chef no longer available", () => {
+  const chefStates: [string, (route: Route) => Promise<void>][] = [
+    [
+      "chef deactivated",
+      async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response, json: { ...(await response.json()), status: "INACTIVE" } });
+      },
+    ],
+    ["chef deleted (404)", (route) => route.fulfill({ status: 404, json: { message: "Chef not found" } })],
+  ];
+  for (const [label, serveChef] of chefStates) {
+    test(`${label}: customer is told and the basket is untouched`, async ({ page, request }) => {
+      const { token, email } = await registerCustomerViaApi(request, API);
+      const { chefId, other } = await findChefWithExtras(request);
+      const number = await placeOrderViaApi(request, token, chefId, [{ dishId: other.id, quantity: 1 }]);
+
+      await addDishFromAnotherChef(page, request, chefId);
+      await page.route(`**/api/chef/${chefId}`, serveChef);
+      await signIn(page, email, "/orders");
+
+      const card = page.getByRole("listitem").filter({ hasText: number });
+      await card.getByRole("button", { name: "Order again" }).click();
+
+      await expect(card.getByRole("alert")).toHaveText("None of these dishes are available anymore");
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(page).toHaveURL(/\/orders$/);
+      await expect(page.getByRole("link", { name: "Cart, 1 items" })).toBeVisible();
+    });
+  }
+});
+
+test("a line from before KAN-10 (no dish reference) is named as no longer available", async ({ page, request }) => {
+  const { token, email } = await registerCustomerViaApi(request, API);
+  const { chefId, withExtra, other } = await findChefWithExtras(request);
+  const number = await placeOrderViaApi(request, token, chefId, [
+    { dishId: withExtra.id, quantity: 1 },
+    { dishId: other.id, quantity: 2 },
+  ]);
+
+  // Serve the history as it looks for an old order: one line has no dishId.
+  await page.route("**/api/customer/orders?**", async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    const order = json.list.find((o: { number: string }) => o.number === number);
+    if (order) {
+      const legacy = order.orderDishList.find((l: { nameEn: string }) => l.nameEn === withExtra.nameEn);
+      delete legacy.dishId;
+    }
+    await route.fulfill({ response, json });
+  });
+  await signIn(page, email, "/orders");
+  await page.getByRole("listitem").filter({ hasText: number }).getByRole("button", { name: "Order again" }).click();
+
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(page.getByRole("status")).toHaveText(`1 item is no longer available: ${withExtra.nameEn}.`);
+  await expect(page.locator(".cs_wrap .grid")).toHaveCount(1);
+  await expect(await checkoutLine(page, other.nameEn)).toContainText("2×");
+});
+
 test.describe("order again - basket from a different chef", () => {
   test("asks first; No keeps the basket, Yes replaces it", async ({ page, request }) => {
     const { token, email } = await registerCustomerViaApi(request, API);
@@ -248,7 +308,13 @@ test.describe("order again - basket from a different chef", () => {
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/\/orders$/);
     await expect(page.getByRole("link", { name: "Cart, 1 items" })).toBeVisible();
+    // The other chef's dish is still the only line, and nothing from the old order was added.
+    await page.goto("/checkout");
+    await expect(page.locator(".cs_wrap .grid")).toHaveCount(1);
+    await expect(page.locator(".cs_wrap .grid").first()).toContainText("1×");
+    await expect(await checkoutLine(page, other.nameEn)).toHaveCount(0);
 
+    await page.goto("/orders");
     await card.getByRole("button", { name: "Order again" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Yes, replace" }).click();
     await expect(page).toHaveURL(/\/checkout$/);
