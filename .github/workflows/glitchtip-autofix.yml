@@ -129,9 +129,11 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           WANTED: ${{ github.event.inputs.issue_id }}
         run: |
-          # The DebugController error is a deliberate test trigger, never a bug
-          # to fix (.agents/rules/backend-package-boundaries.md).
-          jq '[.[] | select((.title + " " + (.culprit // "")) | test("Boom! This is a test exception|/api/debug/boom") | not)]
+          # Deliberate demo errors, never bugs to fix: the DebugController test
+          # trigger (.agents/rules/backend-package-boundaries.md) and the
+          # random "Simulated failure during ..." events of
+          # observability/FlakyHeartbeatJob (course material for GlitchTip).
+          jq '[.[] | select((.title + " " + (.culprit // "")) | test("Boom! This is a test exception|/api/debug/boom|Simulated failure during|FlakyHeartbeatJob") | not)]
               | sort_by(-(.count | tonumber))' autofix/all-issues.json > autofix/candidates.json
           if [ -n "$WANTED" ]; then
             jq --arg id "$WANTED" '[.[] | select(.id == $id)]' autofix/candidates.json > autofix/tmp.json
@@ -259,6 +261,10 @@ jobs:
 
             Step 2 - Root cause. Find the code the stack trace points to and
             explain WHY it fails (not just where). Check git log for the file.
+            The checkout is current main, which may be newer than the code that
+            produced the event: if main already contains a fix (cite the commit),
+            change no code, use status "already-fixed", and say in the ticket
+            that the GlitchTip issue can be resolved.
 
             Step 3 - Fix, only if you are confident of the root cause and the
             fix is small and local:
@@ -278,7 +284,7 @@ jobs:
             Step 4 - Write these files (the workflow commits and opens the PR;
             do not run git commit / push yourself):
               - autofix/result.json:
-                  {"status": "fixed" | "not-fixed", "jira_key": "KAN-..",
+                  {"status": "fixed" | "not-fixed" | "already-fixed", "jira_key": "KAN-..",
                    "reason": "<one sentence>", "tests_passed": true|false}
               - if fixed, autofix/commit-msg.txt: first line
                 "<JIRA_KEY>: <what was fixed> (GT-${{ steps.pick.outputs.id }})",
@@ -287,7 +293,7 @@ jobs:
                 root cause, the fix, the regression test, how it was verified
                 (test command + result), risks. End with a "Human review needed"
                 checklist.
-            If not fixed, add a jira_add_comment to the ticket with the root
+            If not fixed or already fixed, add a jira_add_comment to the ticket with the root
             cause analysis and why no automatic fix was made.
 
       - name: Read result
