@@ -113,7 +113,11 @@ jobs:
           for p in $GLITCHTIP_PROJECTS; do
             curl -fsS -H "Authorization: Bearer $GLITCHTIP_API_TOKEN" \
               "${GLITCHTIP_URL%/}/api/0/projects/$GLITCHTIP_ORG/$p/issues/?query=is:unresolved&limit=100" \
-              | jq --arg p "$p" '[.[] | . + {projectSlug: $p}]' > autofix/p.json
+              | jq --arg p "$p" --arg base "${GLITCHTIP_URL%/}/$GLITCHTIP_ORG" \
+                '[.[] | . + {projectSlug: $p,
+                  permalink: "\($base)/issues/\(.id)?project=\(.project.id)"}]' > autofix/p.json
+            # GlitchTip's own permalink puts the project slug where the org
+            # belongs (.../backend/issues/<id>), which 404s - rebuild it.
             jq -s 'add' autofix/all-issues.json autofix/p.json > autofix/tmp.json
             mv autofix/tmp.json autofix/all-issues.json
           done
