@@ -90,21 +90,61 @@ class OrderControllerTest {
         return objectMapper.writeValueAsString(body);
     }
 
-    @Test
-    void createOrder_noteLongerThan2000_isRejectedWith400() throws Exception {
-        String token = customerToken();
+    // KAN-30 / GT-8543692: order.note is VARCHAR(2000); a longer note used to
+    // reach the DB and come back as a 500. Each test uses its own customer, so
+    // order count checks are isolated; accepted orders are deleted afterwards.
+    private Map<String, Object> cashOrderWithNote(String note) throws Exception {
         Map<String, Object> body = new HashMap<>(objectMapper.readValue(cashOrderPayload(), Map.class));
-        body.put("note", "x".repeat(2001));
-        mockMvc.perform(post("/api/order")
+        if (note == null) {
+            body.remove("note");
+        } else {
+            body.put("note", note);
+        }
+        return body;
+    }
+
+    private String placeOrderExpectingOk(String token, Map<String, Object> body) throws Exception {
+        String response = mockMvc.perform(post("/api/order")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("number").asText();
+    }
+
+    @Test
+    void createOrder_noteLongerThan2000_isRejectedWith400AndNotSaved() throws Exception {
+        String token = customerToken();
+        mockMvc.perform(post("/api/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(cashOrderWithNote("x".repeat(2001)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Note must be at most 2000 characters"));
+
+        mockMvc.perform(get("/api/customer/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
+    void createOrder_noteOfExactly2000_isAccepted() throws Exception {
+        String token = customerToken();
+        String number = placeOrderExpectingOk(token, cashOrderWithNote("x".repeat(2000)));
+        orderRepository.findByNumber(number).ifPresent(orderRepository::delete);
+    }
+
+    @Test
+    void createOrder_withoutNote_isAccepted() throws Exception {
+        String token = customerToken();
+        String number = placeOrderExpectingOk(token, cashOrderWithNote(null));
+        orderRepository.findByNumber(number).ifPresent(orderRepository::delete);
     }
 
     @Order(3)
     @Test
-    void createOrder_cashPayment_succeeds()throws Exception {
+    void createOrder_cashPayment_succeeds() throws Exception {
         String token = customerToken();
         String response = mockMvc.perform(post("/api/order")
                         .header("Authorization", "Bearer " + token)
