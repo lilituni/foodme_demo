@@ -132,8 +132,9 @@ jobs:
           # Deliberate demo errors, never bugs to fix: the DebugController test
           # trigger (.agents/rules/backend-package-boundaries.md) and the
           # random "Simulated failure during ..." events of
-          # observability/FlakyHeartbeatJob (course material for GlitchTip).
-          jq '[.[] | select((.title + " " + (.culprit // "")) | test("Boom! This is a test exception|/api/debug/boom|Simulated failure during|FlakyHeartbeatJob") | not)]
+          # observability/FlakyHeartbeatJob, plus the "Storefront / Admin background
+          # task failed" ones of apps/{web,admin}/src/lib/flakyHeartbeat (course material).
+          jq '[.[] | select((.title + " " + (.culprit // "")) | test("Boom! This is a test exception|/api/debug/boom|Simulated failure during|FlakyHeartbeatJob|(Storefront|Admin) background task failed|flakyHeartbeat") | not)]
               | sort_by(-(.count | tonumber))' autofix/all-issues.json > autofix/candidates.json
           if [ -n "$WANTED" ]; then
             jq --arg id "$WANTED" '[.[] | select(.id == $id)]' autofix/candidates.json > autofix/tmp.json
