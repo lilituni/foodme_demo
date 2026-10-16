@@ -31,8 +31,9 @@ jobs:
         # On a PR the selected JUnit classes run in selective-tests.yml.
         run: ./gradlew build ${{ github.event_name == 'pull_request' && '-x test' || '' }}
 
+      # No JUnit run on a PR (-x test), so nothing to upload or publish there.
       - name: Upload JUnit results
-        if: always()
+        if: always() && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: backend-junit-results
@@ -40,7 +41,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish test summary
-        if: always()
+        if: always() && github.event_name == 'push'
         uses: dorny/test-reporter@v1
         with:
           name: Backend Test Results
