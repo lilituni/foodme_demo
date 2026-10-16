@@ -124,6 +124,11 @@ export default function Orders() {
                       {order.chefName}
                       {order.createdAt ? ` · ${formatOrderDate(order.createdAt)}` : ""}
                     </p>
+                    {order.promoCode && (order.discount ?? 0) > 0 && (
+                      <p className="mt-1 text-sm font-medium text-emerald-700">
+                        Saved {formatAmd(order.discount ?? 0)} with {order.promoCode}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="font-semibold tabular-nums text-zinc-900">
