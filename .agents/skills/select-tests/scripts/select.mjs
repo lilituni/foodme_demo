@@ -160,7 +160,10 @@ function report(sel) {
     }
     lines.push("");
   } else if (!sel.runAll) {
-    lines.push("_No judge verdict - rule baseline only._", "");
+    const agentWorked = sel.traces.some((t) => t.status === "traced") || sel.selected.some((s) => s.sources.includes("agent"));
+    lines.push(agentWorked
+      ? "_No judge verdict - the agent's selection above was not checked by the judge._"
+      : "_No judge verdict - rule baseline with its safe fallbacks only._", "");
   }
   lines.push(`<sub>base ${sel.base.slice(0, 7)} → head ${sel.head.slice(0, 7)} · the post-merge full run on main checks this selection for misses</sub>`);
   lines.push(`<!-- selection: ${JSON.stringify({ runAll: sel.runAll, tests: sum("tests"), total: sum("testsTotal") })} -->`);
