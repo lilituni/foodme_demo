@@ -132,7 +132,10 @@ test.describe("KAN-9 cancel order - approved admin cases", () => {
     await expect(row(page, fmC)).toBeVisible(); // expected[3] FM-c listed
     const chips = page.locator("tbody .MuiChip-root");
     await expect(chips.first()).toBeVisible(); // sync: rows rendered
-    for (const chip of await chips.all()) await expect(chip).toHaveText(CANCELLED); // expected[3] no other status
+    // Auto-retries until the filtered page has replaced the unfiltered one; a one-off
+    // chips.all() snapshot raced that refetch and pointed at rows that were gone.
+    await expect(chips.filter({ hasNotText: CANCELLED })).toHaveCount(0); // expected[3] no other status
+    await expect(row(page, fmC)).toBeVisible(); // expected[3] FM-c still listed after the refetch
 
     // Step 3: FM-c's details.
     await row(page, fmC).click();
