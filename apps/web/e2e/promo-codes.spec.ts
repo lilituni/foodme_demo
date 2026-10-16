@@ -167,6 +167,11 @@ test.describe("promo codes - rejections and placing the order", () => {
     expect(order.discount).toBeCloseTo(subtotal * 0.1, 2);
     expect(order.totalPrice).toBeCloseTo(subtotal * 0.9, 2);
 
+    // My orders shows the code and what it saved.
+    await page.goto("/orders");
+    const row = page.getByRole("listitem").filter({ hasText: number });
+    await expect(row.getByText(`Saved ${amd(subtotal * 0.1)} with SAVE10`)).toBeVisible();
+
     // Not remembered after the cart is cleared.
     await fillBasket(page, chefId, dish, 1);
     await page.goto("/checkout");
