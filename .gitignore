@@ -77,3 +77,6 @@ agentic-workflows/
 
 # Machine-local agent settings (enabled MCP servers etc.)
 .agents/settings.local.json
+
+# --- Selection Based Testing (generated per run) ------------------------
+.selection/

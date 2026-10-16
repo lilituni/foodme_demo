@@ -1,0 +1,211 @@
+# Selection Based Testing - on a PR, run only the tests the change needs.
+#
+#   select   rules (test-map.json) -> select-tests skill (agent traces + adds) ->
+#            selection-judge subagent (read-only, max 1 fix round) -> selection.json
+#   junit / e2e-web / e2e-admin   run only what was selected (or everything if runAll)
+#
+# The selection logic lives in .agents/skills/select-tests (skill, rules and scripts),
+# so a local `/select-tests` selects exactly like CI.
+# Never a silent skip: if Claude fails, `finalize` falls back to the rules + their fallbacks,
+# which are always safe. The full suite still runs after merge on main (ci.yml), and
+# ci.yml's `selection-check` job compares it with this PR's selection (misses / recall).
+name: Selective Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: selective-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  S: .agents/skills/select-tests/scripts
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  select:
+    name: Select tests
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write # sticky comment
+    outputs:
+      run_all: ${{ steps.cmd.outputs.run_all }}
+      run_junit: ${{ steps.cmd.outputs.run_junit }}
+      run_web: ${{ steps.cmd.outputs.run_web }}
+      run_admin: ${{ steps.cmd.outputs.run_admin }}
+      junit_args: ${{ steps.cmd.outputs.junit_args }}
+      web_specs: ${{ steps.cmd.outputs.web_specs }}
+      admin_specs: ${{ steps.cmd.outputs.admin_specs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # base...head diff
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # A PR could commit its own .selection/; never trust it.
+      - name: Rule baseline
+        run: |
+          rm -rf .selection
+          node $S/build_catalog.mjs
+          node $S/select.mjs rules --base "$BASE" --head "$HEAD"
+
+      - name: Need the agent?
+        id: need
+        run: |
+          echo "agent=$(node -p "require('./.selection/selection.json').runAll ? 'false' : 'true'")" >> "$GITHUB_OUTPUT"
+
+      - name: Select tests (agent + judge)
+        id: claude
+        if: steps.need.outputs.agent == 'true'
+        continue-on-error: true # the rule baseline + fallbacks are a safe answer on their own
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: >-
+            --max-turns 80
+            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*),Bash(node .agents/skills/select-tests/scripts/*)"
+          prompt: |
+            Use the `select-tests` skill (Skill tool) in CI mode for pull request
+            #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            Base commit: ${{ env.BASE }}
+            Head commit: ${{ env.HEAD }}
+            Output folder: .selection (Step 1 is already done - test-catalog.json
+            and the rule baseline selection.json are there; start at Step 2).
+
+            Follow the skill to the end of Step 5 and stop. Do not run any test.
+
+      # The action hides Claude's tool calls in the log; keep them (denials, judge call) for debugging.
+      - name: Upload agent transcript
+        if: always() && steps.claude.outputs.execution_file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: select-agent-transcript
+          path: ${{ steps.claude.outputs.execution_file }}
+          if-no-files-found: warn
+
+      # Always runs: closes open traces with their fallback even if Claude failed half-way.
+      - name: Finalize selection
+        id: cmd
+        run: |
+          node $S/select.mjs finalize
+          node $S/select.mjs commands
+          test -s .selection/selection-report.md || node $S/select.mjs report > /dev/null
+          if [ "${{ steps.need.outputs.agent }}" = "true" ] && ! ls .selection/judge-*.json >/dev/null 2>&1; then
+            printf '\n> ⚠️ The agent/judge step did not finish - no judge verdict; open traces fell back to their safe defaults. [Run](%s)\n' \
+              "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .selection/selection-report.md
+          fi
+          cat .selection/selection-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload selection
+        uses: actions/upload-artifact@v4
+        with:
+          name: selection
+          path: .selection/
+          include-hidden-files: true
+
+      - name: Post / update selection comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: selective-tests
+          path: .selection/selection-report.md
+
+  junit:
+    name: JUnit (selected)
+    needs: select
+    if: needs.select.outputs.run_junit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: apps/backend
+      - name: Run selected JUnit tests
+        working-directory: apps/backend
+        run: |
+          if [ "${{ needs.select.outputs.run_all }}" = "true" ]; then
+            ./gradlew test
+          else
+            ./gradlew test ${{ needs.select.outputs.junit_args }}
+          fi
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-junit-results
+          path: apps/backend/build/test-results/test/*.xml
+          if-no-files-found: warn
+
+  e2e:
+    name: E2E (selected)
+    needs: select
+    if: needs.select.outputs.run_web == 'true' || needs.select.outputs.run_admin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Copy env file
+        run: cp .env.example .env
+      - name: Boot core profile
+        run: docker compose -f infra/docker-compose.yml --profile core up -d --build
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8081/actuator/health | grep -q '"status":"UP"' && echo "backend is up" && exit 0
+            echo "waiting for backend... ($i)"; sleep 5
+          done
+          docker compose -f infra/docker-compose.yml --profile core logs backend
+          exit 1
+
+      - name: Run selected web specs
+        if: needs.select.outputs.run_web == 'true'
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          if [ "${{ needs.select.outputs.run_all }}" = "true" ]; then
+            npx playwright test
+          else
+            npx playwright test ${{ needs.select.outputs.web_specs }}
+          fi
+
+      - name: Run selected admin specs
+        if: (success() || failure()) && needs.select.outputs.run_admin == 'true'
+        working-directory: apps/admin
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          if [ "${{ needs.select.outputs.run_all }}" = "true" ]; then
+            npx playwright test
+          else
+            npx playwright test ${{ needs.select.outputs.admin_specs }}
+          fi
+
+      - name: Upload Playwright reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-playwright-reports
+          path: |
+            apps/web/playwright-report/
+            apps/admin/playwright-report/
+          if-no-files-found: warn
+
+      - name: Tear down core profile
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --profile core down -v
