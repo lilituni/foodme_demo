@@ -83,6 +83,8 @@ jobs:
             and the rule baseline selection.json are there; start at Step 2).
 
             Follow the skill to the end of Step 5 and stop. Do not run any test.
+            Call the selection-judge in the foreground (run_in_background: false)
+            and wait for its verdict - this job ends as soon as you end your turn.
 
       # The action hides Claude's tool calls in the log; keep them (denials, judge call) for debugging.
       - name: Upload agent transcript
