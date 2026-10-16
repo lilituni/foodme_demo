@@ -167,10 +167,36 @@ test.describe("promo codes - rejections and placing the order", () => {
     expect(order.discount).toBeCloseTo(subtotal * 0.1, 2);
     expect(order.totalPrice).toBeCloseTo(subtotal * 0.9, 2);
 
+    // My orders shows the code and what it saved.
+    await page.goto("/orders");
+    const row = page.getByRole("listitem").filter({ hasText: number });
+    await expect(row.getByText(`Saved ${amd(subtotal * 0.1)} with SAVE10`)).toBeVisible();
+
     // Not remembered after the cart is cleared.
     await fillBasket(page, chefId, dish, 1);
     await page.goto("/checkout");
     await expect(promoInput(page)).toHaveValue("");
     await expect(summary(page).anyDiscount).toHaveCount(0);
+  });
+
+  test("an order placed without a code shows no savings line on My orders", async ({ page, request }) => {
+    const { email } = await registerCustomerViaApi(request, API);
+    const { chefId, dish } = await findChefDish(request, priciest);
+    await signIn(page, email, "/orders");
+    await fillBasket(page, chefId, dish, Math.ceil(3000 / dish.price));
+    await page.goto("/checkout");
+
+    await page.getByText("Takeaway", { exact: true }).click();
+    await page.getByRole("button", { name: "Place order" }).click();
+
+    await expect(page).toHaveURL(/\/orders\/success\?number=FM-\d+/);
+    const number = new URL(page.url()).searchParams.get("number")!;
+    const order = await (await request.get(`${API}/api/order/number/${number}`)).json();
+    expect(order.promoCode ?? null).toBeNull();
+
+    await page.goto("/orders");
+    const row = page.getByRole("listitem").filter({ hasText: number });
+    await expect(row).toBeVisible();
+    await expect(row.getByText(/^Saved .* with /)).toHaveCount(0);
   });
 });
