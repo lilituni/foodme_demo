@@ -114,7 +114,16 @@ header = `F-nn`), the proposal first:
 | `not-a-bug` | `Not a bug` / `File bug` / `Spec gap (back to 01)` |
 
 "Other" lets the human change severity, priority, wording or name an existing
-key. Record each answer as the finding's `decision`
+key.
+
+**Deep root-cause triage.** For a `product-bug` or `flaky` proposal, or any
+proposal with `confidence: low`, add one more option (if there's room in the
+4) - `Deep triage first`: the decision is left open and the finding gets the
+action `deep-triage` (see 6). The separate `/triage-pipeline` workflow then
+investigates it black-box (reproduce, logs, events, metrics, rated causes)
+and writes its verdict back as the finding's `deep_triage`; re-run
+`/bug-triage <T>` afterwards to decide with that verdict in hand (step 4
+shows `deep_triage` next to the proposal). Record each answer as the finding's `decision`
 `{ class, action, by: <git config user.name>, at: <date -u>, note }`.
 A changed draft is shown again before it's filed.
 
@@ -131,6 +140,8 @@ one line each:
   removes the later gates anyway).
 - `re-run 08` - for `environment` findings, after the human fixes the cause.
 - `inbox` - items set to `triaged`.
+- `deep-triage` - findings handed to `/triage-pipeline --from <T>/F-nn`
+  (their decision stays open).
 
 Ask with AskUserQuestion: `Approve and act` / `Change a decision` / `Stop here`.
 `Change a decision` → back to 4 for the findings named. `Stop here` →
@@ -159,19 +170,23 @@ Set `R/status` to `▶09 · acting`. Record each action in the finding's
   step's gate and every later gate from `gates.yaml`, and add a `reopened`
   entry whose `reason` names the findings (`F-nn: <summary>`).
 - **inbox**: set the item's `status: triaged` and `finding: "<T>/F-nn"`.
+- **deep-triage**: don't run it here (it has its own human gates). Record
+  `{ type: "deep-triage", status: "pending", result: "/triage-pipeline --from <T>/F-nn" }`;
+  the final reply lists the commands to run.
 
 An action that fails (Jira down, marked test still red) stays `failed`; say
 so - never retry by changing the decision.
 
 ## 7. Gate and end
 
-If nothing was re-opened, add the `triage` entry to `R/gates.yaml` (keep the
+If nothing was re-opened and no finding waits for deep triage, add the `triage` entry to `R/gates.yaml` (keep the
 others): `{ approved: true, by, at: <date -u>, note: "<N> findings: <b> bugs filed (<keys>), <c> comments, <m> tests marked, <k> not a bug" + the human's note }`.
 
 Show the final table `F | decision | action | result (key / commit)`.
 
 - `STATUS: DONE: N findings triaged (<b> bugs filed: <keys>); next /test-reporting <T> (step 10)`
 - `STATUS: NEEDS_HUMAN: re-run /<step skill> <T> (step NN re-opened: <reason>)`
+- `STATUS: NEEDS_HUMAN: run /triage-pipeline --from <T>/F-nn for <ids>, then re-run /bug-triage <T>`
 - `STATUS: NEEDS_HUMAN: fix the environment (<what>) and re-run /run-regression <T>`
 - `STATUS: BLOCKED: <reason>`
 

@@ -75,6 +75,12 @@ failing CI run). This skill calls it like any other step; the bug-triage
 workflow does its own human approvals and writes `R/triage.json`, which step 10
 reads. No bug is filed in Jira before a human approves it in step 09.
 
+For a finding whose cause isn't clear, step 09 can hand it to the separate
+**triage pipeline** (`/triage-pipeline --from <T>/F-nn`, subagents
+`triage-worker` + `triage-judge`): a black-box root-cause analysis that
+writes its verdict back into the finding as `deep_triage`. Step 09 then ends
+`NEEDS_HUMAN` until that finding is decided on a re-run.
+
 ## How to run
 
 1. Make sure `R` exists. Work out the first unfinished step (a fresh run starts at 01):
