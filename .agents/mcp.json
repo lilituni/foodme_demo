@@ -17,6 +17,14 @@
         "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
         "READ_ONLY_MODE": "true"
       }
+    },
+    "glitchtip": {
+      "command": "cmd",
+      "args": ["/c", "agentsecrets", "env", "--", "npx", "-y", "mcp-glitchtip"]
+    },
+    "grafana": {
+      "type": "http",
+      "url": "${GRAFANA_MCP_URL}"
     }
   }
 }
