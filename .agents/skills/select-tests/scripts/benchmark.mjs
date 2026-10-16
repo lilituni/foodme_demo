@@ -5,7 +5,7 @@
 // rules alone have picked the tests the developer wrote/changed for that PR? Those tests are the
 // best cheap "ground truth" of what the change affects.
 //
-//   node agentic-workflows/selective-testing/scripts/benchmark.mjs [--prs "5f47a4b 2752fdd"] [--out .selection/benchmark]
+//   node .agents/skills/select-tests/scripts/benchmark.mjs [--prs "5f47a4b 2752fdd"] [--out .selection/benchmark]
 //   (default: every merged PR on main whose branch name contains "feature/")
 //   -> <out>/benchmark.json + benchmark.md
 //
@@ -19,7 +19,7 @@ import { ROOT, SUITES, git, outDir, parseArgs, readJson, writeJson } from "./lib
 const args = parseArgs(process.argv.slice(2));
 const OUT = outDir({ out: args.out || ".selection/benchmark" });
 mkdirSync(OUT, { recursive: true });
-const here = "agentic-workflows/selective-testing/scripts";
+const here = ".agents/skills/select-tests/scripts";
 
 execFileSync("node", [`${here}/build_catalog.mjs`, "--out", OUT], { cwd: ROOT, stdio: "inherit" });
 const catalog = readJson(join(OUT, "test-catalog.json"));

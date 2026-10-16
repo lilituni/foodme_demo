@@ -259,7 +259,7 @@ jobs:
       - name: Evaluate
         if: steps.pr.outputs.number
         run: |
-          node agentic-workflows/selective-testing/scripts/evaluate.mjs             --selection pr-selection --out evaluation             --junit-dir full/junit             --web-json full/pw/web/playwright-results.json             --admin-json full/pw/admin/playwright-results.json
+          node .agents/skills/select-tests/scripts/evaluate.mjs             --selection pr-selection --out evaluation             --junit-dir full/junit             --web-json full/pw/web/playwright-results.json             --admin-json full/pw/admin/playwright-results.json
           cat evaluation/evaluation.md >> "$GITHUB_STEP_SUMMARY"
           gh pr comment "${{ steps.pr.outputs.number }}" -R "${{ github.repository }}" --body-file evaluation/evaluation.md
 

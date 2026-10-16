@@ -73,9 +73,7 @@ infra/docker-compose.local.yml
 
 # --- Agentic workflows -----------------------------------------------------
 # Run outputs (spec.yaml, gates.yaml, reports, status line file) stay local.
-agentic-workflows/*
-# ...except the selector itself (rules + scripts), which CI runs.
-!agentic-workflows/selective-testing/
+agentic-workflows/
 
 # Machine-local agent settings (enabled MCP servers etc.)
 .agents/settings.local.json

@@ -18,7 +18,7 @@ rest. A miss lets a bug reach `main`; an extra test costs a minute. So:
 - **Scripts own the file.** Change `selection.json` only through
   `select.mjs` commands - never edit it by hand.
 
-`S=agentic-workflows/selective-testing/scripts`, output folder `O` (default
+`S=.agents/skills/select-tests/scripts`, output folder `O` (default
 `.selection`, git-ignored). All commands below take `--out $O`.
 
 ## Inputs

@@ -4,8 +4,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-export const MAP_PATH = resolve(ROOT, "agentic-workflows/selective-testing/test-map.json");
+export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+export const MAP_PATH = resolve(ROOT, ".agents/skills/select-tests/test-map.json");
 export const SUITES = ["junit", "web", "admin"];
 
 export function git(...args) {

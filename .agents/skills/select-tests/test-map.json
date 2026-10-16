@@ -15,7 +15,7 @@
     { "id": "runtime-env", "why": "The stack the e2e tests run against.",
       "glob": ["infra/docker-compose.yml", "**/Dockerfile", ".env.example"] },
     { "id": "selector-itself", "why": "A change to the selector or to CI must be proven by a full run.",
-      "glob": ["agentic-workflows/selective-testing/{test-map.json,scripts/**}", ".github/workflows/ci.yml", ".github/workflows/selective-tests.yml"] }
+      "glob": [".agents/skills/select-tests/**", ".agents/agents/selection-judge.md", ".github/workflows/ci.yml", ".github/workflows/selective-tests.yml"] }
   ],
 
   "ignore": [
