@@ -119,7 +119,10 @@ Then append to `$O/selection-report.md` (keep the generated part as it is):
 ## Local vs CI
 
 - **CI** (the prompt says so): stop after Step 5. The workflow posts the report
-  and runs the commands.
+  and runs the commands. The CI allowlist only lets through plain commands, so
+  write `$S` out as `node .agents/skills/select-tests/scripts/select.mjs ...`
+  (no shell variables), write files such as `judge-N.json` with Write, and add
+  the selector notes with Edit - no heredocs, `>`/`>>` redirects or python.
 - **Local:** show the human the report table, the selector notes and the run
   commands, e.g.
 

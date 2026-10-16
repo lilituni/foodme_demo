@@ -72,7 +72,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: >-
             --max-turns 80
-            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*),Bash(node .agents/skills/select-tests/scripts/*)"
+            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Write,Edit,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*),Bash(node .agents/skills/select-tests/scripts/*)"
           prompt: |
             Use the `select-tests` skill (Skill tool) in CI mode for pull request
             #${{ github.event.pull_request.number }} in ${{ github.repository }}.
