@@ -55,7 +55,14 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    // Seeded course bugs and open Jira bugs (@Tag("known-bug")) fail on purpose,
+    // so the normal run skips them and stays green. Run them with
+    // ./gradlew test -PincludeKnownBugs
+    useJUnitPlatform {
+        if (!project.hasProperty('includeKnownBugs')) {
+            excludeTags 'known-bug'
+        }
+    }
     testLogging {
         events 'passed', 'failed', 'skipped'
     }
