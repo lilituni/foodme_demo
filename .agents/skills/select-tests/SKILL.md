@@ -83,9 +83,11 @@ node $S/select.mjs strip --out $O        # -> $O/judge-input.json (no reasons)
 ```
 
 Call the **selection-judge** subagent (Agent tool, `subagent_type:
-selection-judge`) with only: the paths `$O/judge-input.json`,
-`$O/test-catalog.json`, the base and head SHAs. Save the final `json` block of
-its answer **word for word** as `$O/judge-1.json`.
+selection-judge`, `run_in_background: false`) with only: the paths
+`$O/judge-input.json`, `$O/test-catalog.json`, the base and head SHAs. Wait for
+its answer - never end your turn while the judge runs (in CI that ends the job
+and the verdict is lost). Save the final `json` block of its answer **word for
+word** as `$O/judge-1.json`.
 
 - `PASS` -> Step 5.
 - `FAIL` -> `node $S/select.mjs apply-judge --verdict $O/judge-1.json --out $O`
