@@ -1,0 +1,141 @@
+{
+  "$comment": "Selection Based Testing - path rules. A changed file is matched against runAll, then ignore, then every rule (all matching rules apply). A file nothing matches -> run everything (safe default). Changed test files are always selected themselves. Rules with a trace field select nothing themselves: the select-tests agent must trace the change and resolve it, otherwise `finalize` applies their fallback. Suites: junit = backend test class simple names, web = apps/web/e2e spec files, admin = apps/admin/e2e spec files; \"*\" = the whole suite. Globs: ** any path, * any name part, {a,b} alternatives.",
+
+  "runAll": [
+    { "id": "build-and-deps", "why": "Build files and dependencies can change anything.",
+      "glob": ["apps/backend/build.gradle", "apps/backend/settings.gradle", "apps/backend/gradle/**", "apps/backend/gradlew*",
+               "apps/web/package.json", "apps/web/package-lock.json", "apps/web/vite.config.*", "apps/web/tsconfig*.json",
+               "apps/admin/package.json", "apps/admin/package-lock.json", "apps/admin/vite.config.*"] },
+    { "id": "edited-migration", "why": "Editing an applied migration breaks Flyway everywhere (migrations are append-only).", "statusNot": "A",
+      "glob": ["apps/backend/src/main/resources/db/migration/**"] },
+    { "id": "schema-and-config", "why": "App config and security config affect every endpoint.",
+      "glob": ["apps/backend/src/main/resources/*.properties",
+               "apps/backend/src/main/resources/*.yml", "apps/backend/src/main/java/**/config/**",
+               "apps/backend/src/main/java/**/security/**", "apps/backend/src/main/java/**/FoodmeBackendApplication.java"] },
+    { "id": "runtime-env", "why": "The stack the e2e tests run against.",
+      "glob": ["infra/docker-compose.yml", "**/Dockerfile", ".env.example"] },
+    { "id": "selector-itself", "why": "A change to the selector or to CI must be proven by a full run.",
+      "glob": ["agentic-workflows/selective-testing/{test-map.json,scripts/**}", ".github/workflows/ci.yml", ".github/workflows/selective-tests.yml"] }
+  ],
+
+  "ignore": [
+    { "id": "docs-and-course", "why": "No runtime effect.",
+      "glob": ["**/*.md", "docs/**", "runs/**", "*.patch", "agentic-workflows/functional-testing/**", ".agents/**", ".claude/**",
+               ".github/workflows/claude-*.yml", ".github/workflows/glitchtip-autofix.yml", ".github/workflows/keepalive.yml",
+               ".github/workflows/mutation-testing.yml", "render.yaml", "render-monitoring.yaml", "infra/monitoring/**",
+               ".mcp.json", ".gitignore", "**/.gitignore", "LICENSE"] },
+    { "id": "frontend-error-reporting", "why": "Sentry/heartbeat wiring - covered by the build/lint jobs, no test asserts on it.",
+      "glob": ["apps/web/src/lib/sentry.ts", "apps/web/src/lib/flakyHeartbeat.ts", "apps/admin/src/lib/**"] },
+    { "id": "debug-endpoint", "why": "Manual GlitchTip trigger, deliberately untested.",
+      "glob": ["apps/backend/src/main/java/**/controller/api/DebugController.java"] }
+  ],
+
+  "rules": [
+    { "id": "be-promo", "why": "Promo code quote and its use when placing an order (KAN-11).",
+      "glob": ["apps/backend/src/main/java/**/{service/PromoCodeService,model/PromoCode,repository/PromoCodeRepository,dto/PromoQuote*}*.java"],
+      "junit": ["PromoCodeControllerTest", "PromoCodeCasesTest", "OrderPromoCoverageTest"],
+      "web": ["promo-codes.spec.ts", "kan-11-cases.spec.ts"] },
+
+    { "id": "be-order", "why": "Order creation, pricing, status and cancel - the core of every purchase flow.",
+      "glob": ["apps/backend/src/main/java/**/{service/OrderService,controller/api/OrderController,model/Order,model/OrderDish,model/OrderDishAddition,repository/OrderRepository,repository/OrderDishRepository}.java",
+               "apps/backend/src/main/java/**/dto/{CreateOrder*,OrderDto,OrderDish*,OrderCreateResponseDto,OrderListResponseDto,OrderStatusUpdateDto,DeliveryPrice*,AddressDto}.java",
+               "apps/backend/src/main/java/**/{model/Address,repository/AddressRepository}.java"],
+      "junit": ["OrderControllerTest", "OrderServiceCoverageTest", "OrderPromoCoverageTest", "OrderCancelControllerTest", "CancelOrderCasesTest", "PromoCodeCasesTest", "OrderReviewControllerTest"],
+      "web": ["happy-path.spec.ts", "order-cancel.spec.ts", "kan-9-cases.spec.ts", "order-again.spec.ts", "kan-10-cases.spec.ts", "promo-codes.spec.ts", "kan-11-cases.spec.ts", "order-ratings.spec.ts"],
+      "admin": ["admin-flows.spec.ts", "kan-9-cases.spec.ts"] },
+
+    { "id": "be-review", "why": "Order ratings (KAN-8).",
+      "glob": ["apps/backend/src/main/java/**/{service/OrderReviewService,model/OrderReview,repository/OrderReviewRepository,dto/CreateOrderReviewDto,dto/OrderReviewDto}.java"],
+      "junit": ["OrderReviewControllerTest", "OrderReviewServiceTest"],
+      "web": ["order-ratings.spec.ts"] },
+
+    { "id": "be-customer-auth", "why": "Customer register/login - every e2e flow signs a customer up.",
+      "glob": ["apps/backend/src/main/java/**/{controller/api/CustomerAuthController,service/CustomerAuthService,model/Customer,repository/CustomerRepository}.java",
+               "apps/backend/src/main/java/**/dto/{CustomerAuthDto,CustomerLoginRequestDto,CustomerRegisterRequestDto}.java"],
+      "junit": ["CustomerAuthControllerTest", "OrderControllerTest", "OrderCancelControllerTest"],
+      "web": ["*"] },
+
+    { "id": "be-customer-orders", "why": "Signed-in customer's profile and order history (/api/customer/me, /api/customer/orders).",
+      "glob": ["apps/backend/src/main/java/**/controller/api/CustomerController.java", "apps/backend/src/main/java/**/dto/CustomerProfileDto.java"],
+      "junit": ["CustomerAuthControllerTest", "OrderControllerTest", "OrderCancelControllerTest", "CancelOrderCasesTest", "OrderReviewControllerTest"],
+      "web": ["storefront-flows.spec.ts", "order-cancel.spec.ts", "kan-9-cases.spec.ts", "order-again.spec.ts", "kan-10-cases.spec.ts", "order-ratings.spec.ts"] },
+
+    { "id": "be-chef", "why": "Chef listing/details - entry point of the explore and chef pages.",
+      "glob": ["apps/backend/src/main/java/**/{controller/api/ChefController,service/ChefService,model/Chef,model/ChefTagOrder,repository/ChefRepository,repository/ChefTagOrderRepository}.java",
+               "apps/backend/src/main/java/**/dto/{Chef*,ExploreChef*,KitchenDto*,DescriptionDto*,NameDto*}.java"],
+      "junit": ["ChefControllerTest"],
+      "web": ["layout.spec.ts", "storefront-flows.spec.ts", "happy-path.spec.ts"] },
+
+    { "id": "be-dish", "why": "Dishes, extras and search.",
+      "glob": ["apps/backend/src/main/java/**/{controller/api/DishController,service/DishService,model/Dish,model/DishAddition,model/DishTag,repository/Dish*}.java",
+               "apps/backend/src/main/java/**/dto/Dish*.java"],
+      "junit": ["DishControllerTest"],
+      "web": ["layout.spec.ts", "happy-path.spec.ts", "flake-dish-modal.spec.ts", "flake-cart-persistence.spec.ts"] },
+
+    { "id": "be-images", "why": "Images are only checked visually on the layout pages.",
+      "glob": ["apps/backend/src/main/java/**/{controller/api/ImageController,service/ImageService,service/ImageSeedRunner}.java"],
+      "web": ["layout.spec.ts"] },
+
+    { "id": "be-admin", "why": "Back-office API - no JUnit tests exist yet, only admin e2e and the storefront->admin happy path.",
+      "glob": ["apps/backend/src/main/java/**/controller/admin/**", "apps/backend/src/main/java/**/service/Admin*.java",
+               "apps/backend/src/main/java/**/{model/Admin,repository/AdminRepository}.java", "apps/backend/src/main/java/**/dto/Admin*.java"],
+      "admin": ["*"],
+      "web": ["happy-path.spec.ts"] },
+
+    { "id": "be-new-migration", "why": "A NEW migration adds schema/seed rows - every JUnit test boots Flyway, so run them all; the feature's own rules pick the e2e specs.", "status": "A",
+      "glob": ["apps/backend/src/main/resources/db/migration/**"],
+      "junit": ["*"] },
+
+    { "id": "be-cross-cutting", "why": "Shared backend plumbing - all JUnit tests are cheap, e2e not needed.",
+      "glob": ["apps/backend/src/main/java/**/{exceptionHandler,utils,observability}/**", "apps/backend/src/main/resources/logback-spring.xml",
+               "apps/backend/src/test/resources/**"],
+      "junit": ["*"] },
+
+    { "id": "web-shared-additive", "why": "API client, shared types and translations: most changes ADD a function/field/key that one feature uses. The select-tests agent traces who uses the changed symbols; if nobody traces it (rules-only run), every web spec runs.",
+      "glob": ["apps/web/src/api/foodme.ts", "apps/web/src/types/**", "apps/web/src/locales/**"],
+      "trace": { "fallback": { "web": ["*"] } } },
+
+    { "id": "web-shared", "why": "Shared storefront code used by every page.",
+      "glob": ["apps/web/src/{App,main,router}.tsx", "apps/web/src/index.css", "apps/web/src/api/client.ts",
+               "apps/web/src/components/ui/**", "apps/web/src/lib/{utils,i18n,db,auth-next,auth-storage}.ts",
+               "apps/web/src/hooks/**", "apps/web/src/providers/**", "apps/web/src/schemas/auth-schema.ts",
+               "apps/web/src/pages/{Login,Register}/**", "apps/web/src/components/sections/{auth-panel,user-cart,cart-item-card,item-quantity-button-group}.tsx",
+               "apps/web/e2e/auth.ts", "apps/web/playwright.config.ts"],
+      "web": ["*"] },
+
+    { "id": "web-browse", "why": "Home, explore, chef pages and layout.",
+      "glob": ["apps/web/src/pages/{Home,Explore,Chef}/**", "apps/web/src/components/layout/**",
+               "apps/web/src/components/sections/{chef-card,chef-details,chef-dishes,dish-card,dish-modal}.tsx", "apps/web/public/**"],
+      "web": ["layout.spec.ts", "storefront-flows.spec.ts", "happy-path.spec.ts", "flake-dish-modal.spec.ts", "flake-cart-persistence.spec.ts", "kan-10-cases.spec.ts"] },
+
+    { "id": "web-checkout", "why": "Checkout form, delivery type and price summary.",
+      "glob": ["apps/web/src/pages/Checkout/**", "apps/web/src/schemas/checkout-schema.ts",
+               "apps/web/src/components/sections/{checkout-*,order-delivery-form,delivery-type-input,phone-input}.tsx"],
+      "web": ["happy-path.spec.ts", "storefront-flows.spec.ts", "promo-codes.spec.ts", "kan-11-cases.spec.ts", "order-again.spec.ts", "kan-10-cases.spec.ts"] },
+
+    { "id": "web-promo", "why": "Promo code field (KAN-11).",
+      "glob": ["apps/web/src/components/sections/promo-code-field.tsx"],
+      "web": ["promo-codes.spec.ts", "kan-11-cases.spec.ts"] },
+
+    { "id": "web-orders", "why": "My orders, order status and tracking pages.",
+      "glob": ["apps/web/src/pages/{Orders,OrderStatus,Tracking}/**"],
+      "web": ["storefront-flows.spec.ts", "order-cancel.spec.ts", "kan-9-cases.spec.ts", "order-again.spec.ts", "kan-10-cases.spec.ts", "order-ratings.spec.ts", "happy-path.spec.ts"] },
+
+    { "id": "web-cancel", "why": "Cancel order dialog (KAN-9).",
+      "glob": ["apps/web/src/components/sections/cancel-order-dialog.tsx"],
+      "web": ["order-cancel.spec.ts", "kan-9-cases.spec.ts"] },
+
+    { "id": "web-order-again", "why": "Order again (KAN-10).",
+      "glob": ["apps/web/src/components/sections/order-again-button.tsx", "apps/web/src/lib/reorder.ts"],
+      "web": ["order-again.spec.ts", "kan-10-cases.spec.ts"] },
+
+    { "id": "web-ratings", "why": "Order ratings (KAN-8).",
+      "glob": ["apps/web/src/components/sections/{rate-order-dialog,star-rating}.tsx"],
+      "web": ["order-ratings.spec.ts"] },
+
+    { "id": "admin-app", "why": "Back-office SPA. The storefront happy path also logs into the admin panel.",
+      "glob": ["apps/admin/src/**", "apps/admin/e2e/**", "apps/admin/playwright.config.*", "apps/admin/index.html"],
+      "admin": ["*"],
+      "web": ["happy-path.spec.ts"] }
+  ]
+}
