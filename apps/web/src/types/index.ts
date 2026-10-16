@@ -212,6 +212,9 @@ export interface FullOrderDto {
   totalPrice: number;
   createdAt: string;
   review?: OrderReviewDto | null;
+  /** KAN-11: the promo code saved on the order and what it took off. */
+  promoCode?: string | null;
+  discount?: number | null;
 }
 
 export interface OrderReviewDto {
