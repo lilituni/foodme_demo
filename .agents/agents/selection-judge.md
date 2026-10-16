@@ -27,7 +27,7 @@ every `missing` test to the selection, so its shape matters.
 2. `test-catalog.json` - every test file with its tests, endpoints, pages and
    the backend classes it imports. Ids you return must exist here.
 3. The diff itself: `git diff <base>...<head>` (and `-- <path>` for one file).
-4. `agentic-workflows/selective-testing/test-map.json` - only for S1 (which
+4. `.agents/skills/select-tests/test-map.json` - only for S1 (which
    paths force a full run).
 
 Bash is for **read-only git only**: `git diff`, `git show`, `git log`,

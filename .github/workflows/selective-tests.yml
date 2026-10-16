@@ -4,7 +4,7 @@
 #            selection-judge subagent (read-only, max 1 fix round) -> selection.json
 #   junit / e2e-web / e2e-admin   run only what was selected (or everything if runAll)
 #
-# The selection logic lives in .agents/skills/select-tests + agentic-workflows/selective-testing,
+# The selection logic lives in .agents/skills/select-tests (skill, rules and scripts),
 # so a local `/select-tests` selects exactly like CI.
 # Never a silent skip: if Claude fails, `finalize` falls back to the rules + their fallbacks,
 # which are always safe. The full suite still runs after merge on main (ci.yml), and
@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  S: agentic-workflows/selective-testing/scripts
+  S: .agents/skills/select-tests/scripts
   BASE: ${{ github.event.pull_request.base.sha }}
   HEAD: ${{ github.event.pull_request.head.sha }}
 
@@ -71,7 +71,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: >-
             --max-turns 80
-            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*),Bash(node agentic-workflows/selective-testing/scripts/*)"
+            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git grep:*),Bash(node .agents/skills/select-tests/scripts/*)"
           prompt: |
             Use the `select-tests` skill (Skill tool) in CI mode for pull request
             #${{ github.event.pull_request.number }} in ${{ github.repository }}.

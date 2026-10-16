@@ -2,7 +2,7 @@
 // Post-merge evaluation: compare a PR's selection with the FULL suite that ran on main after the merge.
 // No extra test run - the full run on main happens anyway (ci.yml, push to main).
 //
-//   node agentic-workflows/selective-testing/scripts/evaluate.mjs \
+//   node .agents/skills/select-tests/scripts/evaluate.mjs \
 //     --selection <dir with selection.json [+ judge-N.json]> \
 //     [--junit-dir <dir of TEST-*.xml>] [--web-json <playwright json>] [--admin-json <playwright json>] \
 //     [--out <dir>]                       -> <out>/evaluation.json + evaluation.md

@@ -3,7 +3,7 @@
 // what it touches (endpoints, pages, backend classes). The selector skill and the
 // selection-judge read it instead of opening every test file.
 //
-//   node agentic-workflows/selective-testing/scripts/build_catalog.mjs [--out .selection]
+//   node .agents/skills/select-tests/scripts/build_catalog.mjs [--out .selection]
 //   -> <out>/test-catalog.json
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, basename } from "node:path";
