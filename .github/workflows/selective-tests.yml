@@ -63,6 +63,7 @@ jobs:
           echo "agent=$(node -p "require('./.selection/selection.json').runAll ? 'false' : 'true'")" >> "$GITHUB_OUTPUT"
 
       - name: Select tests (agent + judge)
+        id: claude
         if: steps.need.outputs.agent == 'true'
         continue-on-error: true # the rule baseline + fallbacks are a safe answer on their own
         uses: anthropics/claude-code-action@v1
@@ -83,6 +84,15 @@ jobs:
 
             Follow the skill to the end of Step 5 and stop. Do not run any test.
 
+      # The action hides Claude's tool calls in the log; keep them (denials, judge call) for debugging.
+      - name: Upload agent transcript
+        if: always() && steps.claude.outputs.execution_file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: select-agent-transcript
+          path: ${{ steps.claude.outputs.execution_file }}
+          if-no-files-found: warn
+
       # Always runs: closes open traces with their fallback even if Claude failed half-way.
       - name: Finalize selection
         id: cmd
@@ -91,7 +101,7 @@ jobs:
           node $S/select.mjs commands
           test -s .selection/selection-report.md || node $S/select.mjs report > /dev/null
           if [ "${{ steps.need.outputs.agent }}" = "true" ] && ! ls .selection/judge-*.json >/dev/null 2>&1; then
-            printf '\n> ⚠️ The agent/judge step did not finish - this is the rule baseline with its safe fallbacks. [Run](%s)\n' \
+            printf '\n> ⚠️ The agent/judge step did not finish - no judge verdict; open traces fell back to their safe defaults. [Run](%s)\n' \
               "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .selection/selection-report.md
           fi
           cat .selection/selection-report.md >> "$GITHUB_STEP_SUMMARY"
