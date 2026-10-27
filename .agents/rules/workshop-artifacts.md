@@ -1,6 +1,6 @@
 # This repo is a workshop artifact — some "stray-looking" files are intentional
 
-This project doubles as course material (see root `README.md`). A few
+This project doubles as course material (see `README.md`; the student walkthrough is in `SETUP.md`). A few
 things that might look like cleanup candidates to an agent are not:
 
 ## `render.yaml` service name
@@ -11,7 +11,7 @@ services:
     name: foodme-lilituni
 ```
 
-`README.md` Step 1 has every student fork the repo and rename this from
+`SETUP.md` Step 1 has every student fork the repo and rename this from
 the template's placeholder to their own identifier — this has already been
 done here (`foodme-lilituni`, per git history). Don't revert it to a
 generic/example name, and don't rename it again without being asked — the
@@ -34,9 +34,9 @@ exercise, not pending changes to apply. Don't `git apply` them, don't
 delete them as "loose files," and don't treat them as uncommitted work
 needing to be staged or cleaned up.
 
-## README step numbering and manual instructions
+## SETUP.md step numbering and manual instructions
 
-`README.md` is written as a sequential, manual walkthrough for students
+`SETUP.md` (formerly the root README) is written as a sequential, manual walkthrough for students
 (GitHub fork → GlitchTip → Render → Grafana → verification). Don't
 "streamline" it into a different structure, automate away its manual
 steps, or renumber sections without being asked — the numbering is
@@ -45,6 +45,6 @@ referenced by students following along, not just internal structure.
 ## Rule
 
 Treat `render.yaml`'s current service name, the root-level `.patch`
-files, and `README.md`'s step-by-step structure as intentional course
+files, and `SETUP.md`'s step-by-step structure as intentional course
 material. Don't modify, delete, or "clean up" any of them unless
 specifically asked to.

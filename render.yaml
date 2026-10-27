@@ -36,6 +36,6 @@ services:
       # (empty = log shipping disabled, the correct state until monitoring exists)
       # It must be the public *.onrender.com URL — free web services cannot
       # RECEIVE private network traffic, so foodme-monitoring:10000 never
-      # resolves. See README.
+      # resolves. See SETUP.md.
       - key: LOKI_PUSH_URL
         sync: false

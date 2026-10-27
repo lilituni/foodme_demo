@@ -14,7 +14,7 @@ skill, which requires the file this skill produces.
 
 If the user named a specific flow/feature/endpoint, use it. If they didn't,
 pick the flow(s) yourself by looking at what the app actually does — e.g.
-skim `README.md`, the customer routes in `apps/web/src`, the admin routes
+skim `README.md` and `SETUP.md`, the customer routes in `apps/web/src`, the admin routes
 in `apps/admin/src`, and the backend controllers in
 `apps/backend/src/main/java/am/foodme/backend/controller/{api,admin}`.
 Prefer a flow with real business logic (checkout/cart, ordering, auth) over
