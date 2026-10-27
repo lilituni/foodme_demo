@@ -13,7 +13,7 @@ management.metrics.distribution.percentiles-histogram.http.server.requests=true
 ```
 
 Grafana dashboards and the workshop's own verification step (`up{app="foodme-backend"}`
-in the README) depend on the `prometheus` actuator endpoint staying exposed
+in `SETUP.md`) depend on the `prometheus` actuator endpoint staying exposed
 and on per-request histogram buckets staying enabled (needed to compute
 p95/p99 latency). Narrowing `management.endpoints.web.exposure.include` or
 removing the histogram property breaks those dashboards silently — they'll

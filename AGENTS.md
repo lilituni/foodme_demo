@@ -100,4 +100,4 @@ npm run test:e2e     # Playwright e2e
 - This repo is also a workshop artifact: some files that look like cleanup
   candidates are intentional course material — see
   @.agents/rules/workshop-artifacts.md before touching `render.yaml`'s
-  service name, the root-level `.patch` files, or `README.md`'s structure.
+  service name, the root-level `.patch` files, or `SETUP.md`'s structure.

@@ -5,7 +5,7 @@ description: Walk through pre-deploy and post-deploy verification for FoodMe's R
 
 # Render deploy checklist
 
-Mirrors the manual steps in the root `README.md`, as a checklist instead of
+Mirrors the manual steps in `SETUP.md`, as a checklist instead of
 free-text instructions. This skill cannot query Render's dashboard directly
 (no API token) — the pre-deploy items must be confirmed by the user; the
 post-deploy item can be checked for real if a monitoring URL is available.
@@ -14,7 +14,7 @@ post-deploy item can be checked for real if a monitoring URL is available.
 
 Check `render.yaml`'s `services[0].name`. If it's still a generic/example
 name (not something the user has personalized), tell them to change it per
-README Step 1 before deploying — Render derives the service URL from this.
+`SETUP.md` Step 1 before deploying — Render derives the service URL from this.
 
 ## Step 2 — Pre-deploy: app blueprint (`render.yaml`)
 
@@ -43,7 +43,7 @@ Only relevant once the app from Step 2 is Live. Confirm:
 
 Common failure mode to check for: using the monitoring service's *private*
 hostname instead of its public `*.onrender.com` URL for `LOKI_PUSH_URL` —
-per the README, free Render web services can't receive private-network
+per `SETUP.md`, free Render web services can't receive private-network
 traffic, so that silently never delivers logs.
 
 ## Step 4 — Post-deploy: live verification (can be automated)
@@ -58,7 +58,7 @@ no auth needed, per `infra/monitoring/README.md` — to actually run:
 
 If Grafana MCP tools aren't available in this session, tell the user to run
 these two queries themselves in Grafana's **Explore** view (Prometheus and
-Loki data sources respectively), same as README Step 5.
+Loki data sources respectively), same as `SETUP.md` Step 5.
 
 Note: free-tier services sleep after ~15 min idle and monitoring data is
 wiped on every monitoring-service restart — a "down"/"no data" result right
